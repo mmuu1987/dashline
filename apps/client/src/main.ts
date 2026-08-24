@@ -474,4 +474,12 @@ async function boot(): Promise<void> {
   }
 }
 
-void boot();
+boot().catch((e: unknown) => {
+  console.error(e);
+  const el = document.getElementById('game');
+  if (el) {
+    el.textContent = `加载失败：${(e as Error)?.message ?? e}`;
+    (el as HTMLElement).style.cssText =
+      'color:#ff8fa3;font:14px/1.6 sans-serif;padding:24px;white-space:pre-wrap;';
+  }
+});

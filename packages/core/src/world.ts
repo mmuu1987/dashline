@@ -51,6 +51,8 @@ export interface WorldSnapshot {
   coinCount: number;
   /** 已碎裂的碎裂板下标（渲染层据此隐藏） */
   crumblesBroken: readonly number[];
+  /** 蓄力进度 0~1（长按上升段），0 = 未在蓄力。渲染层画蓄力环用 */
+  charge: number;
 }
 
 const FINISH_BASE_SCORE = 10_000_000;
@@ -118,6 +120,7 @@ export class World {
       distanceM: Math.floor(this._x / 25),
       coinCount: this._coinsGot,
       crumblesBroken: broken,
+      charge: !this._grounded && this.holding ? Math.min(1, this.holdTicks / HOLD_MAX_TICKS) : 0,
     };
   }
 

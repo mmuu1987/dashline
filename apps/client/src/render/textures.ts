@@ -182,18 +182,21 @@ function makeConfetti(): Texture {
   });
 }
 
+/** 资源 URL：拼上构建 base（dev='/'，Pages 子路径='./'），兼容任意部署目录 */
+const assetUrl = (p: string): string => import.meta.env.BASE_URL + p.replace(/^\//, '');
+
 export async function loadAssets(): Promise<GameAssets> {
   const urls = [
-    '/assets/ground.png',
-    '/assets/plank.png',
-    '/assets/coin.png',
-    '/assets/cloud.png',
-    '/assets/sparkle1.png',
-    '/assets/gold.png',
-    '/assets/white.png',
-    '/assets/p-red.png',
+    'assets/ground.png',
+    'assets/plank.png',
+    'assets/coin.png',
+    'assets/cloud.png',
+    'assets/sparkle1.png',
+    'assets/gold.png',
+    'assets/white.png',
+    'assets/p-red.png',
   ] as const;
-  const loaded = await Promise.all(urls.map((u) => Assets.load(u)));
+  const loaded = await Promise.all(urls.map((u) => Assets.load(assetUrl(u))));
   return {
     ground: loaded[0] as Texture,
     plank: loaded[1] as Texture,

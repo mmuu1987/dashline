@@ -4,7 +4,7 @@ export const STEP_MS = 1000 / TICK_RATE;
 export const STEP_S = 1 / TICK_RATE;
 
 /** core 物理法则版本：任何逻辑改动必须 bump，榜单按版本分桶 */
-export const CORE_VERSION = 'core.2';
+export const CORE_VERSION = 'core.3';
 export const PROTOCOL_VERSION = 1;
 
 /** 输入位掩码（每 tick 1 字节） */

@@ -66,9 +66,17 @@ export class BallActor {
       this.getSurfaceY = getSurfaceY;
       this.root.addChildAt(this.shadow, 0);
     }
+
+    // 蓄力环（仅玩家）：长按上升段显示，弧长 = 蓄力进度
+    if (!ghostMode) {
+      this.chargeRing = new Graphics();
+      this.chargeRing.visible = false;
+      this.root.addChild(this.chargeRing);
+    }
   }
 
   private getSurfaceY?: (x: number, fromY: number) => number | null;
+  private chargeRing: Graphics | null = null;
 
   setState(snap: WorldSnapshot): void {
     if (this.hidden) return;
@@ -76,6 +84,23 @@ export class BallActor {
     this.roller.rotation += (snap.x - this.lastX) / PLAYER_R;
     this.lastX = snap.x;
     this.root.position.set(snap.x, snap.y);
+
+    // 蓄力环：金色弧随蓄力进度增长
+    if (this.chargeRing) {
+      const c = snap.charge;
+      if (c > 0.04) {
+        const g = this.chargeRing;
+        g.clear();
+        g.arc(0, 0, PLAYER_R + 8, -Math.PI / 2, -Math.PI / 2 + c * Math.PI * 2).stroke({
+          width: 3,
+          color: c >= 1 ? 0xffd23f : 0xffe08a,
+          alpha: 0.9,
+        });
+        g.visible = true;
+      } else {
+        this.chargeRing.visible = false;
+      }
+    }
 
     // 眼睛看向前进方向；死亡切 X 眼
     this.deadFace.visible = !snap.alive && !this.ghostMode;
@@ -116,7 +141,7 @@ export class BallActor {
     this.lastX = x;
     this.hidden = false;
     this.root.visible = true;
-    this.setState({ tick: 0, x, y, vy: 0, grounded: true, alive: true, finished: false, score: 0, timeMs: 0, distanceM: 0, coinCount: 0, crumblesBroken: [] } satisfies WorldSnapshot);
+    this.setState({ tick: 0, x, y, vy: 0, grounded: true, alive: true, finished: false, score: 0, timeMs: 0, distanceM: 0, coinCount: 0, crumblesBroken: [], charge: 0 } satisfies WorldSnapshot);
   }
 
   hide(): void {

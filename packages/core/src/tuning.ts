@@ -21,11 +21,11 @@ export const TUNING = {
   /** 恒定前进速度 px/s */
   vx: 360,
   /** 起跳初速 px/s */
-  jumpV: 820,
+  jumpV: 760,
   /** 重力 px/s²（越大越"重"，越小越"飘"） */
   grav: 2150,
   /** 长按上升段重力系数：<1 跳更高；1 = 无长按差异 */
-  holdGravFactor: 0.52,
+  holdGravFactor: 0.4,
   /** 弹跳菇弹射初速系数（相对 jumpV） */
   bounceFactor: 1.32,
 } as const;
