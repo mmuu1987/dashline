@@ -2,7 +2,7 @@
  * 求解型 Bot v2：每个地面 tick 用 clone() 预演三条时间线（等待 / 点按跳 / 满蓄力跳），
  * 选择活得更久（平局则更远）的那条。适配弹跳菇、低空刺梁、碎裂板。
  */
-import { GROUND_Y, createWorld, type World } from '@dashline/core';
+import { GROUND_Y, PLAYER_R, createWorld, type World } from '@dashline/core';
 import { encodeInputs, makeInput, seedForDate, todayUTC } from '@dashline/shared';
 
 const seed = seedForDate(todayUTC());
@@ -24,7 +24,9 @@ function rollout(
   let dLeft = delay;
   for (let i = 0; i < depth; i++) {
     const s = clone.snapshot;
-    if (!s.alive || s.finished) return [i, s.x - x0];
+    // 完赛压倒一切（越快分越高），其余按存活 tick 数
+    if (!s.alive || s.finished)
+      return [s.finished ? 1_000_000 - i : i, s.x - x0];
     let inp = 0;
     if (phase === 'delay') {
       inp = 0;
@@ -43,22 +45,31 @@ function rollout(
     clone.step(inp);
   }
   const s = clone.snapshot;
-  return [depth, s.x - x0];
+  return [s.finished ? 1_000_000 : depth, s.x - x0];
 }
 function reactivePolicy(w: World): { inp: number; holdLeft: number } {
-  const x = w.snapshot.x;
+  const s = w.snapshot;
+  const x = s.x;
+  // 恐慌二段跳：坠落到低于地面标高且还有空中跳 → 立刻满蓄力空中跳自救
+  if (!s.grounded && s.vy > 0 && s.y + PLAYER_R > GROUND_Y - 24 && s.airJumps > 0) {
+    return { inp: makeInput(true, true), holdLeft: 15 };
+  }
   let spikeAhead = false;
+  let carpet: { x: number; w: number } | null = null; // 超宽刺毯（升降台段）
   for (const hz of w.track.hazards) {
-    if (hz.y + hz.h > GROUND_Y - 60 && hz.x + hz.w < x - 10) continue; // 只看地面刺
+    if (hz.x + hz.w < x - 10) continue; // 只看前方
     if (hz.x > x + 150) break;
     if (hz.y + hz.h <= GROUND_Y - 60) continue; // 悬梁不需要跳
-    if (hz.x + hz.w > x) spikeAhead = true;
+    spikeAhead = true;
+    if (hz.w > 140 && hz.x > x) carpet = { x: hz.x, w: hz.w };
   }
   let gapAhead = false;
   for (const seg of w.track.grounds) {
     if (x >= seg.x0 && x <= seg.x1 && seg.x1 - x < 60) gapAhead = true;
   }
   if (gapAhead) return { inp: makeInput(true, true), holdLeft: 18 };
+  // 宽刺毯：提前起跳会落进毯中 —— 贴到边前 ~55px 才满蓄力起跳
+  if (carpet && carpet.x - x <= 55) return { inp: makeInput(true, true), holdLeft: 18 };
   if (spikeAhead) return { inp: makeInput(true, true), holdLeft: 3 };
   return { inp: 0, holdLeft: 0 };
 }

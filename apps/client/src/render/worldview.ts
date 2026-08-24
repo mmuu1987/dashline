@@ -1,6 +1,6 @@
 /** 赛道静态化：地面双层平铺 / 平台 / 尖刺 / 宝石 / 旗帜 / 装饰散布 —— 每次进赛道构建一次。 */
 import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js';
-import { GROUND_Y, SPIKE_W, type Track } from '@dashline/core';
+import { GROUND_Y, SPIKE_W, moverOffsetY, type Track } from '@dashline/core';
 import { splitmix32 } from '@dashline/shared';
 import { VIEW_H } from './consts.js';
 import type { GameAssets } from './textures.js';
@@ -16,6 +16,19 @@ export class WorldView {
   /** 碎裂板精灵，下标与 track.plats 对齐（snapshot.crumblesBroken 同一索引系） */
   private crumbleSprites: (Container | null)[] = [];
   private brokenPlats = new Set<number>();
+  /** 升降台容器（下标与 track.plats 对齐，随 simTick 摆动） */
+  private moverSprites: (Container | null)[] = [];
+  private simTick = 0;
+  /** 二段跳环 */
+  private ringSprites: Container[] = [];
+  private ringsGotSet = new Set<number>();
+  /** 加速带动画 */
+  private boostFx: Array<{
+    chevrons: Graphics[];
+    bx: number[];
+    zx: number;
+    zw: number;
+  }> = [];
 
   constructor(private assets: GameAssets) {}
 
@@ -26,6 +39,10 @@ export class WorldView {
     this.padCaps = [];
     this.crumbleSprites = [];
     this.brokenPlats.clear();
+    this.moverSprites = [];
+    this.ringSprites = [];
+    this.ringsGotSet.clear();
+    this.boostFx = [];
 
     // 坑底暗色
     const backdrop = new Graphics();
@@ -79,6 +96,7 @@ export class WorldView {
         this.root.addChild(g);
         return;
       }
+      if (p.mover) return; // 升降台由专用容器绘制
       const pts = new TilingSprite({
         texture: this.assets.platformLong,
         width: p.w,
@@ -91,6 +109,34 @@ export class WorldView {
       edge.roundRect(-2, 0, p.w + 4, 24, 6).stroke({ width: 2, color: 0x3f2b16 });
       edge.position.set(p.x, p.y - 12);
       this.root.addChild(edge);
+    });
+
+    // 升降台：木板 + 两端升降导轨箭头（位置随 simTick 在 update/setTick 中摆动）
+    track.plats.forEach((p, idx) => {
+      if (!p.mover) {
+        this.moverSprites[idx] = null;
+        return;
+      }
+      const g = new Container();
+      const board = new TilingSprite({
+        texture: this.assets.platformLong,
+        width: p.w,
+        height: 22,
+      });
+      board.tileScale.set(22 / 16);
+      board.position.set(0, -11);
+      g.addChild(board);
+      const rail = new Graphics();
+      rail.roundRect(-2, 0, p.w + 4, 24, 6).stroke({ width: 2, color: 0x4a5a78 });
+      // 双向小箭头提示"会动"
+      for (const ax of [10, p.w - 10]) {
+        rail.moveTo(ax - 5, -18).lineTo(ax, -24).lineTo(ax + 5, -18).stroke({ width: 2.5, color: 0x8fd3ff });
+        rail.moveTo(ax - 5, 30).lineTo(ax, 36).lineTo(ax + 5, 30).stroke({ width: 2.5, color: 0x8fd3ff });
+      }
+      g.addChild(rail);
+      g.position.set(p.x, p.y + moverOffsetY(p.mover, 0));
+      this.moverSprites[idx] = g;
+      this.root.addChild(g);
     });
 
     // 弹跳菇（弹簧蘑菇：茎 + 帽，帽体做呼吸脉冲）
@@ -147,6 +193,45 @@ export class WorldView {
       s.position.set(c.x, c.y);
       this.coinSprites.push(s);
       this.root.addChild(s);
+    }
+
+    // 加速带：地面金色能量条 + 向右滚动箭头
+    for (const z of track.boosts) {
+      const root = new Container();
+      const base = new Graphics();
+      base.rect(z.x, GROUND_Y - 6, z.w, 6).fill({ color: 0xffd23f, alpha: 0.28 });
+      base.rect(z.x, GROUND_Y - 2, z.w, 2).fill({ color: 0xffe08a, alpha: 0.85 });
+      root.addChild(base);
+      const chevrons: Graphics[] = [];
+      const bx: number[] = [];
+      for (let i = 0; i < Math.floor(z.w / 44); i++) {
+        const ch = new Graphics();
+        ch.moveTo(-10, -22).lineTo(0, -12).lineTo(-10, -2).stroke({ width: 3.5, color: 0xffd23f, alpha: 0.9 });
+        chevrons.push(ch);
+        bx.push(22 + i * 44);
+        root.addChild(ch);
+      }
+      this.boostFx.push({ chevrons, bx, zx: z.x, zw: z.w });
+      this.root.addChild(root);
+    }
+
+    // 二段跳环：金色悬浮圆环 + 光晕（拾取后隐藏）
+    for (const rg of track.rings) {
+      const g = new Container();
+      const glow = new Sprite(this.assets.glow);
+      glow.anchor.set(0.5);
+      glow.tint = 0xffd23f;
+      glow.alpha = 0.55;
+      glow.scale.set(0.5);
+      glow.blendMode = 'add';
+      g.addChild(glow);
+      const torus = new Graphics();
+      torus.circle(0, 0, 17).stroke({ width: 5, color: 0xffd23f });
+      torus.circle(0, 0, 24).stroke({ width: 1.5, color: 0xffe08a, alpha: 0.6 });
+      g.addChild(torus);
+      g.position.set(rg.x, rg.y);
+      this.ringSprites.push(g);
+      this.root.addChild(g);
     }
 
     // 终点旗
@@ -208,6 +293,27 @@ export class WorldView {
     }
   }
 
+  /** 同步模拟 tick：升降台按三角波就位（每帧调用） */
+  setTick(tick: number): void {
+    this.simTick = tick;
+    const t = this.track;
+    if (!t) return;
+    for (let i = 0; i < t.plats.length; i++) {
+      const p = t.plats[i]!;
+      const sp = this.moverSprites[i];
+      if (p.mover && sp) sp.y = p.y + moverOffsetY(p.mover, tick);
+    }
+  }
+
+  /** 同步已拾取的环（隐藏对应精灵） */
+  setRingsGot(got: readonly number[]): void {
+    for (const i of got) {
+      if (this.ringsGotSet.has(i)) continue;
+      this.ringsGotSet.add(i);
+      this.ringSprites[i]!.visible = false;
+    }
+  }
+
   /** 碎裂板中心点（碎屑粒子用） */
   getCrumbleCenter(index: number): { x: number; y: number } | null {
     const p = this.track?.plats[index];
@@ -217,6 +323,11 @@ export class WorldView {
   getCoinPoint(index: number): { x: number; y: number } | null {
     const c = this.track?.coins[index];
     return c ? { x: c.x, y: c.y } : null;
+  }
+
+  getRingPoint(index: number): { x: number; y: number } | null {
+    const rg = this.track?.rings[index];
+    return rg ? { x: rg.x, y: rg.y } : null;
   }
 
   /** 玩家脚下最近支撑面 y（用于阴影） */
@@ -231,7 +342,8 @@ export class WorldView {
     }
     for (const p of t.plats) {
       if (x < p.x || x > p.x + p.w) continue;
-      if (p.y >= fromY - 4 && (best === null || p.y < best)) best = p.y;
+      const py = p.mover ? p.y + moverOffsetY(p.mover, this.simTick) : p.y;
+      if (py >= fromY - 4 && (best === null || py < best)) best = py;
     }
     return best;
   }
@@ -243,6 +355,23 @@ export class WorldView {
       if (!s.visible) continue;
       s.texture = this.assets.gemFrames[Math.floor(tSec * 8 + i) % 4]!;
       s.y += Math.sin(tSec * 2.6 + i) * 0.18;
+    }
+    // 二段跳环：呼吸脉动 + 轻微摇摆
+    for (let i = 0; i < this.ringSprites.length; i++) {
+      const g = this.ringSprites[i]!;
+      if (!g.visible) continue;
+      const k = 1 + Math.sin(tSec * 3.2 + i * 1.7) * 0.08;
+      g.scale.set(k);
+      g.rotation = Math.sin(tSec * 1.4 + i) * 0.12;
+    }
+    // 加速带箭头循环滚动
+    for (const fx of this.boostFx) {
+      const off = (tSec * 150) % fx.zw;
+      fx.chevrons.forEach((ch, i) => {
+        ch.x = fx.zx + ((fx.bx[i]! - 0 + off) % fx.zw);
+        ch.y = GROUND_Y - 4;
+        ch.alpha = 0.9;
+      });
     }
     // 弹跳菇呼吸（轻微压扁回弹）
     for (let i = 0; i < this.padCaps.length; i++) {

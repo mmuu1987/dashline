@@ -16,14 +16,14 @@ import {
   STEP_S,
   TICK_RATE,
 } from '@dashline/shared';
-import { GROUND_Y, PIT_Y, buildTrack, type Track } from './chunks.js';
+import { GROUND_Y, PIT_Y, buildTrack, type Plat, type Track } from './chunks.js';
 
 export { GROUND_Y, PIT_Y } from './chunks.js';
 export type { Track, GroundSeg, Hazard, Coin, Plat, Pad } from './chunks.js';
 export { PLAYER_R, CRUMBLE_TICKS, bounceV } from './tuning.js';
 export { TUNING, tapJumpHeight, holdJumpHeight } from './tuning.js';
 
-import { PLAYER_R, TUNING, CRUMBLE_TICKS, bounceV } from './tuning.js';
+import { PLAYER_R, TUNING, CRUMBLE_TICKS, bounceV, BOOST_FACTOR, BOOST_TICKS, djumpV, moverOffsetY } from './tuning.js';
 
 export const START_X = 80;
 export const START_Y = GROUND_Y - PLAYER_R;
@@ -35,6 +35,9 @@ export type SimEvent =
   | { type: 'crash'; cause: 'spike' | 'pit' }
   | { type: 'bounce' }
   | { type: 'crumble'; index: number }
+  | { type: 'ring'; index: number }
+  | { type: 'djump' }
+  | { type: 'boost' }
   | { type: 'finish' };
 
 export interface WorldSnapshot {
@@ -51,6 +54,12 @@ export interface WorldSnapshot {
   coinCount: number;
   /** 已碎裂的碎裂板下标（渲染层据此隐藏） */
   crumblesBroken: readonly number[];
+  /** 已拾取的二段跳环下标（渲染层据此隐藏） */
+  ringsGot: readonly number[];
+  /** 加速剩余比例 0~1（>0 时渲染金色拖尾） */
+  boost: number;
+  /** 当前可用的空中二段跳次数（0~2） */
+  airJumps: number;
   /** 蓄力进度 0~1（长按上升段），0 = 未在蓄力。渲染层画蓄力环用 */
   charge: number;
 }
@@ -93,6 +102,8 @@ export class World {
   private holdTicks = 0;
   /** 碎裂板剩余 tick：-2 未触发 / -1 非碎裂板 / >0 倒计时中 / 0 已碎 */
   private platHp: number[] = [];
+  private _airJumps = 0;
+  private _boostLeft = 0;
   private evq: SimEvent[] = [];
 
   constructor(seed: bigint, track?: Track) {
@@ -107,6 +118,10 @@ export class World {
     for (let i = 0; i < this.platHp.length; i++) {
       if (this.platHp[i] === 0) broken.push(i);
     }
+    const ringsGot: number[] = [];
+    for (let i = 0; i < this.track.rings.length; i++) {
+      if (this.track.rings[i]!.got) ringsGot.push(i);
+    }
     return {
       tick: this.tick,
       x: this._x,
@@ -120,6 +135,9 @@ export class World {
       distanceM: Math.floor(this._x / 25),
       coinCount: this._coinsGot,
       crumblesBroken: broken,
+      ringsGot,
+      boost: this._boostLeft > 0 ? this._boostLeft / BOOST_TICKS : 0,
+      airJumps: this._airJumps,
       charge: !this._grounded && this.holding ? Math.min(1, this.holdTicks / HOLD_MAX_TICKS) : 0,
     };
   }
@@ -151,6 +169,8 @@ export class World {
     c.holding = this.holding;
     c.holdTicks = this.holdTicks;
     c.platHp = this.platHp.slice();
+    c._airJumps = this._airJumps;
+    c._boostLeft = this._boostLeft;
     c.evq = [];
     return c;
   }
@@ -159,6 +179,7 @@ export class World {
   step(input: number): void {
     if (!this._alive || this._finished) return;
     this.tick++;
+    if (this._boostLeft > 0) this._boostLeft--;
 
     // ---- 碎裂板倒计时（触发后持续计时，离开也不暂停）----
     for (let i = 0; i < this.platHp.length; i++) {
@@ -181,6 +202,18 @@ export class World {
       this.buffer = 0;
       this.coyote = 0;
       this.evq.push({ type: 'jump' });
+    } else if (
+      (input & IN_JUMP_PRESS) !== 0 &&
+      !this._grounded &&
+      this.coyote <= 0 &&
+      this._airJumps > 0
+    ) {
+      // ---- 空中二段跳（环授予；不占用地面预输入缓冲）----
+      this._vy = -djumpV;
+      this._airJumps--;
+      this.holding = true;
+      this.holdTicks = 0;
+      this.evq.push({ type: 'djump' });
     } else if (this.buffer > 0) {
       this.buffer--;
     }
@@ -190,8 +223,12 @@ export class World {
 
     if (this._grounded) {
       this._vy = 0;
-      // 走下边缘检测
-      if (!this.hasSupportAt(x, half)) {
+      this._airJumps = 0; // 任意落地/站台都重置空中跳
+      // 升降平台随行：先吸附到本 tick 台面再判走下边缘
+      const mv = this.moverUnder(x, half);
+      if (mv !== null) {
+        this._y = this.moverTop(mv, this.tick) - PLAYER_R;
+      } else if (!this.hasSupportAt(x, half)) {
         this._grounded = false;
         this.coyote = COYOTE_TICKS;
       }
@@ -221,8 +258,8 @@ export class World {
       }
     }
 
-    // ---- 前进 ----
-    this._x += TUNING.vx * STEP_S;
+    // ---- 前进（加速带增益期间提速）----
+    this._x += (this._boostLeft > 0 ? TUNING.vx * BOOST_FACTOR : TUNING.vx) * STEP_S;
 
     // ---- 弹跳菇：地面接触即弹射（含本 tick 落在菇上的情况）----
     if (this._grounded) {
@@ -232,6 +269,17 @@ export class World {
           this._grounded = false;
           this.holding = false;
           this.evq.push({ type: 'bounce' });
+          break;
+        }
+      }
+    }
+
+    // ---- 加速带：站台接触即触发（一次性，直到耗尽再踩才重触发）----
+    if (this._grounded && this._boostLeft <= 0) {
+      for (const z of this.track.boosts) {
+        if (this._x + half > z.x && this._x - half < z.x + z.w) {
+          this._boostLeft = BOOST_TICKS;
+          this.evq.push({ type: 'boost' });
           break;
         }
       }
@@ -252,6 +300,21 @@ export class World {
         c.got = true;
         this._coinsGot++;
         this.evq.push({ type: 'coin', index: i });
+      }
+    }
+
+    // ---- 二段跳环 ----
+    const rings = this.track.rings;
+    for (let i = 0; i < rings.length; i++) {
+      const rg = rings[i]!;
+      if (rg.got) continue;
+      if (
+        Math.abs(rg.x - this._x) < PLAYER_R + 16 &&
+        Math.abs(rg.y - this._y) < PLAYER_R + 16
+      ) {
+        rg.got = true;
+        this._airJumps = Math.min(2, this._airJumps + 1);
+        this.evq.push({ type: 'ring', index: i });
       }
     }
 
@@ -287,6 +350,22 @@ export class World {
     this.evq.push({ type: 'crash', cause });
   }
 
+  /** 平台本 tick 的顶面 y（升降台按三角波偏移） */
+  private moverTop(p: Plat, tick: number): number {
+    return p.mover ? p.y + moverOffsetY(p.mover, tick) : p.y;
+  }
+
+  /** 脚下正踩着的升降台（吸附随行用） */
+  private moverUnder(x: number, half: number): Plat | null {
+    const feet = this._y + PLAYER_R;
+    for (const p of this.track.plats) {
+      if (!p.mover) continue;
+      if (x + half < p.x || x - half > p.x + p.w) continue;
+      if (Math.abs(feet - this.moverTop(p, this.tick)) <= 2) return p;
+    }
+    return null;
+  }
+
   /** 站立支撑检测：脚下 2px 内存在平台顶且水平重叠。
    *  首次站上碎裂板会触发其倒计时；已碎裂的板不再提供支撑。 */
   private hasSupportAt(x: number, half: number): boolean {
@@ -299,7 +378,8 @@ export class World {
       const p = this.track.plats[i]!;
       if (p.crumble && this.platHp[i] === 0) continue; // 已碎
       if (x + half < p.x || x - half > p.x + p.w) continue;
-      if (Math.abs(feet - p.y) <= 2) {
+      const py = this.moverTop(p, this.tick);
+      if (Math.abs(feet - py) <= 2) {
         if (p.crumble && this.platHp[i] === -2) this.platHp[i] = CRUMBLE_TICKS;
         return true;
       }
@@ -325,8 +405,11 @@ export class World {
       const p = this.track.plats[i]!;
       if (p.crumble && this.platHp[i] === 0) continue;
       if (x + half < p.x || x - half > p.x + p.w) continue;
-      if (prevFeet <= p.y + 1 && feet >= p.y) {
-        best = best === null ? p.y : Math.min(best, p.y);
+      // 升降台：上一 tick 与本 tick 的台面都参与判定（追上抬升中的台面）
+      const pyPrev = this.moverTop(p, this.tick - 1);
+      const pyCur = this.moverTop(p, this.tick);
+      if (prevFeet <= pyPrev + 1 && feet >= pyCur) {
+        best = best === null ? pyCur : Math.min(best, pyCur);
       }
     }
     return best;

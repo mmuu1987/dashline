@@ -64,6 +64,70 @@ export const holdJumpHeight = _holdHeight;
 export const holdAirTime = _riseTime + _fallTime;
 export const holdJumpRange = TUNING.vx * holdAirTime;
 
+// ---------- 新积木：加速带 ----------
+/** 踩上加速带后的速度倍率与持续时间（tick）。持续须覆盖"带长+助跑+坑宽"全程 */
+export const BOOST_FACTOR = 1.55;
+export const BOOST_TICKS = 90;
+export const boostVx = TUNING.vx * BOOST_FACTOR;
+/** 全程加速下的理想满蓄力跳距（chBoost 坑宽的基准） */
+export const boostRange = boostVx * holdAirTime;
+
+// ---------- 新积木：二段跳环 ----------
+/** 空中二段跳起跳初速系数（相对 jumpV） */
+export const DJUMP_FACTOR = 0.94;
+export const djumpV = TUNING.jumpV * DJUMP_FACTOR;
+/** 二段跳纯点按的水平航程（不含长按延伸） */
+export const djumpTapRange = TUNING.vx * ((2 * djumpV) / TUNING.grav);
+
+// ---------- 新积木：升降平台 ----------
+/** 升降平台运动定义。位置是 tick 的纯函数：只用四则运算与 abs，
+ *  不用 Math.sin（ECMAScript 允许三角函数实现差异，会破坏跨引擎逐位一致）。 */
+export interface MoverDef {
+  /** 相对基准顶面 y 的振幅 px */
+  amp: number;
+  /** 往返周期 tick 数 */
+  periodTicks: number;
+  /** 相位偏移 tick（决定起始高度） */
+  phase: number;
+}
+/** 三角波升降偏移：值域 [-amp, +amp]，u=0 在最低点，半个周期后到最高点 */
+export function moverOffsetY(m: MoverDef, tick: number): number {
+  const u =
+    ((((tick + m.phase) % m.periodTicks) + m.periodTicks) % m.periodTicks) /
+    m.periodTicks;
+  const tri = 2 * Math.abs(2 * u - 1) - 1; // [-1,1] 三角波
+  return m.amp * tri;
+}
+
+// ---------- 关卡摆放工具：满蓄力弧线采样 ----------
+/** 与 world.ts 离散积分逐 tick 一致的满蓄力（一直按住）轨迹高度。
+ *  dx：距起跳点水平位移；返回 feet 高于起跳面的 px 数；超出射程返回 null。 */
+export function holdArcHeightAt(dx: number): number | null {
+  if (dx < 0 || dx > holdJumpRange) return null;
+  let h = 0; // up-positive 高度
+  let v = TUNING.jumpV;
+  let holdLeft = HOLD_MAX_TICKS;
+  const dt = STEP_S;
+  const totalTicks = Math.ceil(holdAirTime / dt) + 2;
+  let prevX = 0;
+  let prevH = 0;
+  for (let t = 1; t <= totalTicks; t++) {
+    const g = holdLeft > 0 ? TUNING.grav * TUNING.holdGravFactor : TUNING.grav;
+    if (holdLeft > 0) holdLeft--;
+    v -= g * dt;
+    h += v * dt;
+    const cx = t * TUNING.vx * dt;
+    if (cx >= dx) {
+      const f = (dx - prevX) / (cx - prevX);
+      return prevH + (h - prevH) * f;
+    }
+    if (h < 0) return null; // 已落回起跳面
+    prevX = cx;
+    prevH = h;
+  }
+  return null;
+}
+
 // ---------- 落点宽容（与 world.ts 的支撑判定一致：±0.6R）----------
 export const EDGE_FORGIVE = PLAYER_R * 0.6;
 /** 越过宽为 gap 的坑实际需要的水平位移 */

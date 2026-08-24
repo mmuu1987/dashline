@@ -12,11 +12,14 @@ import {
 } from '@dashline/shared';
 import {
   PLAYER_R,
+  boostRange,
   bounceHeight,
   bounceRange,
   gapWidthForTier,
+  holdJumpHeight,
   holdJumpRange,
   tapJumpHeight,
+  type MoverDef,
 } from './tuning.js';
 
 /** 世界常量（渲染层也从这里取） */
@@ -47,11 +50,24 @@ export interface Plat {
   w: number;
   /** 碎裂板：踩上后 CRUMBLE_TICKS 内碎裂 */
   crumble?: boolean;
+  /** 升降平台：顶面 y 按 tick 三角波在 [y-amp, y+amp] 往返 */
+  mover?: MoverDef;
 }
 /** 弹跳菇：贴在地面上的弹射区 */
 export interface Pad {
   x: number;
   w: number;
+}
+/** 加速带：地面区间，踩上获得限时 vx 增益 */
+export interface BoostZone {
+  x: number;
+  w: number;
+}
+/** 二段跳环：空中拾取后获得一次额外空中跳 */
+export interface Ring {
+  x: number;
+  y: number;
+  got: boolean;
 }
 export interface Track {
   grounds: GroundSeg[];
@@ -59,6 +75,8 @@ export interface Track {
   coins: Coin[];
   plats: Plat[];
   pads: Pad[];
+  boosts: BoostZone[];
+  rings: Ring[];
   finishX: number;
   length: number;
 }
@@ -72,6 +90,8 @@ class Builder {
   coins: Coin[] = [];
   plats: Plat[] = [];
   pads: Pad[] = [];
+  boosts: BoostZone[] = [];
+  rings: Ring[] = [];
 
   run(dx: number): void {
     this.cursor += dx;
@@ -215,6 +235,66 @@ function chCrumble(b: Builder, r: Rng): void {
   b.run(rngRange(r, 140, 200));
 }
 
+/** 升降电梯：刺毯上方一座三角波升降台 —— 乘坐稳过，或点按连跳硬闯（双路线）。 */
+function chElevator(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 140, 220));
+  const sw = SPIKE_W * rngInt(r, 6, 8); // 204~272px 刺毯
+  const sx = b.cursor;
+  b.hazards.push({ x: sx, y: GROUND_Y - SPIKE_H, w: sw, h: SPIKE_H });
+  const mw = 150;
+  // 低点 top=GROUND_Y-54（板底距刺尖 6px+），高点 top=GROUND_Y-114
+  b.plats.push({
+    x: sx + sw / 2 - mw / 2,
+    y: GROUND_Y - 84,
+    w: mw,
+    mover: { amp: 30, periodTicks: 144, phase: Math.round(rngRange(r, 0, 143)) },
+  });
+  // 高处宝石：只有乘到高点再起跳才够得着
+  b.coins.push(
+    { x: sx + sw / 2 - 40, y: GROUND_Y - 176, got: false },
+    { x: sx + sw / 2, y: GROUND_Y - 198, got: false },
+    { x: sx + sw / 2 + 40, y: GROUND_Y - 176, got: false },
+  );
+  b.cursor += sw;
+  b.run(rngRange(r, 140, 200));
+}
+
+/** 加速带冲刺：踩带提速 → 冲上超远坑（无加速在物理上不可能越过）。 */
+function chBoost(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 150, 230));
+  const zw = 130;
+  b.boosts.push({ x: b.cursor, w: zw });
+  b.run(zw);
+  b.run(rngRange(r, 60, 100)); // 起跳助跑（加速仍在持续）
+  const gw = Math.round(boostRange * rngRange(r, 0.78, 0.88)); // > 满蓄力射程
+  const gx = b.cursor;
+  const apexY = GROUND_Y - rngRange(r, 150, 190);
+  b.coins.push(
+    { x: gx + gw * 0.3, y: GROUND_Y - 90, got: false },
+    { x: gx + gw * 0.55, y: apexY, got: false },
+    { x: gx + gw * 0.8, y: GROUND_Y - 90, got: false },
+  );
+  b.gap(gw);
+  b.run(rngRange(r, 120, 180));
+}
+
+/** 二段跳环：超宽坑（>满蓄力射程），环摆在坑中央的弧线顶点走廊 ——
+ *  起跳点前后漂移 ~60px 都能吃到，空中接力二段跳过剩余。 */
+function chRing(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 150, 220));
+  const W = Math.round(holdJumpRange * rngRange(r, 1.22, 1.38)); // 单跳必死
+  const gx = b.cursor;
+  b.gap(W);
+  // 弧线在顶点附近很平：取"顶点高度略下"作为环心，水平放在坑中央
+  b.rings.push({
+    x: gx + W * 0.5,
+    y: GROUND_Y - holdJumpHeight - PLAYER_R + 14,
+    got: false,
+  });
+  b.coins.push({ x: gx + W * 0.78, y: GROUND_Y - 150, got: false });
+  b.run(rngRange(r, 140, 200));
+}
+
 type ChunkName =
   | 'flat'
   | 'gap0'
@@ -227,7 +307,10 @@ type ChunkName =
   | 'bonus'
   | 'padpit'
   | 'lowbar'
-  | 'crumble';
+  | 'crumble'
+  | 'elevator'
+  | 'boost'
+  | 'ring';
 
 function pickChunk(b: Builder, r: Rng): void {
   const names: ChunkName[] = ['flat', 'flat', 'gap0', 'spike0', 'stairs'];
@@ -238,12 +321,12 @@ function pickChunk(b: Builder, r: Rng): void {
     weights.push(2, 2, 2, 1, 2);
   }
   if (p >= 0.35) {
-    names.push('padpit', 'crumble');
-    weights.push(1, 2);
+    names.push('padpit', 'crumble', 'elevator');
+    weights.push(1, 2, 2);
   }
   if (p >= 0.55) {
-    names.push('gap2', 'spike2');
-    weights.push(2, 2);
+    names.push('gap2', 'spike2', 'boost', 'ring');
+    weights.push(2, 2, 2, 2);
   }
   const name = names[rngPickWeighted(r, weights)]!;
   switch (name) {
@@ -271,6 +354,12 @@ function pickChunk(b: Builder, r: Rng): void {
       return chLowBar(b, r);
     case 'crumble':
       return chCrumble(b, r);
+    case 'elevator':
+      return chElevator(b, r);
+    case 'boost':
+      return chBoost(b, r);
+    case 'ring':
+      return chRing(b, r);
   }
 }
 
@@ -289,6 +378,8 @@ export function buildTrack(seed: bigint): Track {
     coins: b.coins,
     plats: b.plats.sort((a, z) => a.x - z.x),
     pads: b.pads.sort((a, z) => a.x - z.x),
+    boosts: b.boosts.sort((a, z) => a.x - z.x),
+    rings: b.rings.sort((a, z) => a.x - z.x),
     finishX,
     length: b.cursor,
   };

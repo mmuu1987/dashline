@@ -123,12 +123,10 @@
       @keyframes rot { 0%, 25% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
       #rotate-overlay .t1 { font-size: 20px; font-weight: 700; letter-spacing: .05em; }
       #rotate-overlay .t2 { font-size: 13px; opacity: .7; }
-      /* ---- 移动端全屏按钮 ---- */
-      #btn-fs {
-        display: none;
+      /* ---- 移动端全屏 / 静音按钮 ---- */
+      #btn-fs, #btn-mute {
+        display: flex;
         position: absolute;
-        right: calc(12px + env(safe-area-inset-right));
-        bottom: calc(44px + env(safe-area-inset-bottom));
         width: 42px; height: 42px;
         align-items: center; justify-content: center;
         border-radius: 12px;
@@ -136,7 +134,16 @@
         font-size: 20px; pointer-events: auto;
         backdrop-filter: blur(6px);
       }
+      #btn-fs { display: none; }
       @media (pointer: coarse) { #btn-fs { display: flex; } }
+      #btn-fs {
+        right: calc(12px + env(safe-area-inset-right));
+        bottom: calc(44px + env(safe-area-inset-bottom));
+      }
+      #btn-mute {
+        left: calc(12px + env(safe-area-inset-left));
+        bottom: calc(44px + env(safe-area-inset-bottom));
+      }
     </style>
   </head>
   <body>
@@ -151,6 +158,7 @@
         <div id="result"><div class="panel" id="result-panel"></div></div>
         <div id="toast"></div>
         <button id="btn-fs" aria-label="全屏">⛶</button>
+        <button id="btn-mute" aria-label="声音开关">🔊</button>
       </div>
       <div id="rotate-overlay">
         <div class="phone">📱</div>

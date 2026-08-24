@@ -60,6 +60,10 @@ export class GameView {
     return this.worldView.getCoinPoint(i);
   }
 
+  getRingPoint(i: number): { x: number; y: number } | null {
+    return this.worldView.getRingPoint(i);
+  }
+
   getCrumbleCenter(i: number): { x: number; y: number } | null {
     return this.worldView.getCrumbleCenter(i);
   }
@@ -92,6 +96,8 @@ export class GameView {
     this.bg.update(this.camX, dt);
     this.camera.x = -this.camX;
     this.worldView.setCrumbles(snap.crumblesBroken);
+    this.worldView.setTick(snap.tick);
+    this.worldView.setRingsGot(snap.ringsGot ?? []);
     this.worldView.update(tSec);
 
     this.player.setState(snap);
@@ -103,12 +109,16 @@ export class GameView {
       this.ghost.root.visible = false;
     }
 
-    // 冲刺拖尾（存活且移动时）
+    // 冲刺拖尾（存活且移动时；加速期间换金色）
     if (snap.alive && !snap.finished) {
       this.trailT += dt;
       if (this.trailT >= TRAIL_INTERVAL) {
         this.trailT = 0;
-        this.fx.trail(snap.x - PLAYER_R * 0.4, snap.y + (Math.random() - 0.5) * 6);
+        if ((snap.boost ?? 0) > 0) {
+          this.fx.trailGold(snap.x - PLAYER_R * 0.4, snap.y + (Math.random() - 0.5) * 8);
+        } else {
+          this.fx.trail(snap.x - PLAYER_R * 0.4, snap.y + (Math.random() - 0.5) * 6);
+        }
       }
       // 跑动尾尘
       if (snap.grounded) {

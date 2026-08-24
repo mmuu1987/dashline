@@ -16,7 +16,6 @@ import {
   type Hazard,
   type Pad,
   type Plat,
-  type SimEvent,
   type Track,
 } from '../src/index.js';
 
@@ -50,6 +49,8 @@ class TB {
       coins: this.coins,
       plats: this.plats,
       pads: this.pads,
+      boosts: [],
+      rings: [],
       finishX,
       length: this.cursor,
     };
@@ -60,13 +61,13 @@ interface RunResult {
   alive: boolean;
   finished: boolean;
   x: number;
-  events: SimEvent[];
+  events: string[];
   brokenCount: number;
 }
 
 function run(track: Track, inputs: Uint8Array, maxTicks = 3600): RunResult {
   const w = createWorldWithTrack(1n, track);
-  const events: SimEvent[] = [];
+  const events: string[] = [];
   for (let i = 0; i < inputs.length && i < maxTicks; i++) {
     w.step(inputs[i]!);
     for (const e of w.takeEvents()) events.push(e.type);

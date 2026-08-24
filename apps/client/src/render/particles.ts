@@ -130,6 +130,12 @@ export class Particles {
       { life: 0.28, scale: 0.34, alpha: 0.32, shrink: true });
   }
 
+  /** 加速拖尾（金色，additive 更亮）*/
+  trailGold(x: number, y: number): void {
+    this.spawn('sparkle', 0xffd23f, x, y, 0, 0,
+      { life: 0.3, scale: 0.3, alpha: 0.4, shrink: true, add: true });
+  }
+
   update(dtSec: number): void {
     for (let i = this.live.length - 1; i >= 0; i--) {
       const p = this.live[i]!;

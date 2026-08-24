@@ -94,6 +94,15 @@ async function boot(): Promise<void> {
   window.addEventListener('pointerdown', () => sfx.unlock());
   window.addEventListener('keydown', () => sfx.unlock());
 
+  // ---- 静音按钮（状态持久化在 Sfx 内）----
+  const muteBtn = document.getElementById('btn-mute')!;
+  muteBtn.textContent = sfx.isMuted() ? '🔇' : '🔊';
+  muteBtn.addEventListener('click', () => {
+    const muted = sfx.toggleMute();
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    if (!muted) sfx.unlock(); // 解除静音时顺带恢复 BGM
+  });
+
   // ---- 每日种子 ----
   const dateStr = todayUTC();
   const seed = seedForDate(dateStr);
@@ -419,12 +428,33 @@ async function boot(): Promise<void> {
           const s = world.snapshot;
           view.fx.bouncePuff(s.x, s.y + PLAYER_R);
           view.addShake(3);
-          sfx.jump();
+          sfx.djump(); // 与二段跳共用"弹簧音"
           break;
         }
         case 'crumble': {
           const c = view.getCrumbleCenter(ev.index);
           if (c) view.fx.debris(c.x, c.y);
+          sfx.crumble();
+          break;
+        }
+        case 'ring': {
+          sfx.ring();
+          const pt = view.getRingPoint(ev.index);
+          if (pt) view.fx.coin(pt.x, pt.y); // 金色爆发复用
+          view.addShake(1.5);
+          break;
+        }
+        case 'djump': {
+          sfx.djump();
+          {
+            const s = world.snapshot;
+            view.fx.bouncePuff(s.x, s.y + PLAYER_R);
+          }
+          break;
+        }
+        case 'boost': {
+          sfx.boost();
+          view.addShake(2.5);
           break;
         }
         case 'crash': {

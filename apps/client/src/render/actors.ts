@@ -84,6 +84,9 @@ export class BallActor {
     this.roller.rotation += (snap.x - this.lastX) / PLAYER_R;
     this.lastX = snap.x;
     this.root.position.set(snap.x, snap.y);
+    // 加速带增益期间镀金
+    this.roller.tint =
+      (snap.boost ?? 0) > 0 ? 0xffd97a : this.ghostMode ? 0xaab6d8 : 0xffffff;
 
     // 蓄力环：金色弧随蓄力进度增长
     if (this.chargeRing) {
@@ -141,7 +144,7 @@ export class BallActor {
     this.lastX = x;
     this.hidden = false;
     this.root.visible = true;
-    this.setState({ tick: 0, x, y, vy: 0, grounded: true, alive: true, finished: false, score: 0, timeMs: 0, distanceM: 0, coinCount: 0, crumblesBroken: [], charge: 0 } satisfies WorldSnapshot);
+    this.setState({ tick: 0, x, y, vy: 0, grounded: true, alive: true, finished: false, score: 0, timeMs: 0, distanceM: 0, coinCount: 0, crumblesBroken: [], ringsGot: [], boost: 0, airJumps: 0, charge: 0 } satisfies WorldSnapshot);
   }
 
   hide(): void {
