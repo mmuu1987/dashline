@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Dashline · 每日冲刺</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        height: 100%;
+        background: #0d0f14;
+        overflow: hidden;
+        font-family: system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        color: #cfd8ea;
+        -webkit-user-select: none;
+        user-select: none;
+        overscroll-behavior: none;
+      }
+      #stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        touch-action: none;
+      }
+      #game { position: relative; }
+      .game-canvas {
+        display: block;
+        width: min(100vw, calc(100vh * 16 / 9));
+        height: auto;
+        touch-action: none;
+      }
+      /* ---- HUD ---- */
+      #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+      .hud-box {
+        position: absolute;
+        font-size: clamp(12px, 2.6vmin, 16px);
+        line-height: 1.5;
+        text-shadow: 0 1px 3px rgba(0,0,0,.7);
+        white-space: pre-line;
+      }
+      #hud-stats { top: calc(10px + env(safe-area-inset-top)); left: calc(14px + env(safe-area-inset-left)); }
+      #hud-meta  { top: calc(10px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); text-align: right; }
+      #hud-hint  { bottom: calc(8px + env(safe-area-inset-bottom)); left: 0; right: 0; text-align: center; font-size: clamp(11px, 2.2vmin, 13px); opacity: .65; }
+      #hud-mode  { bottom: calc(8px + env(safe-area-inset-bottom)); right: calc(14px + env(safe-area-inset-right)); font-size: clamp(10px, 2vmin, 12px); opacity: .5; }
+      #flash {
+        position: absolute; inset: 0; background: #ff3344;
+        opacity: 0; transition: opacity .35s ease-out;
+      }
+      #flash.on { opacity: .38; transition: none; }
+      /* ---- 结果面板 ---- */
+      #result {
+        position: absolute; inset: 0; display: none;
+        align-items: center; justify-content: center;
+        background: rgba(8,10,16,.62); pointer-events: auto;
+      }
+      #result.show { display: flex; }
+      .panel {
+        background: #171b26;
+        border: 1px solid #2a3040;
+        border-radius: 16px;
+        padding: 26px 34px;
+        text-align: center;
+        min-width: 300px;
+        box-shadow: 0 12px 48px rgba(0,0,0,.5);
+      }
+      .panel h2 { font-size: 22px; margin-bottom: 12px; }
+      .panel .row { font-size: 16px; margin: 4px 0; color: #aab6cf; }
+      .panel .big { font-size: 30px; color: #ffd23f; margin: 8px 0; font-weight: 700; }
+      .panel .btns { margin-top: 18px; display: flex; gap: 10px; justify-content: center; }
+      button {
+        pointer-events: auto;
+        border: 0; border-radius: 10px;
+        padding: 10px 18px; font-size: 15px; cursor: pointer;
+        background: #4fc3f7; color: #08222e; font-weight: 600;
+      }
+      button.ghost-btn { background: #2a3040; color: #cfd8ea; }
+      button:active { transform: translateY(1px); }
+      #toast {
+        position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%);
+        background: #222a3a; padding: 8px 16px; border-radius: 999px;
+        font-size: 13px; opacity: 0; transition: opacity .3s;
+      }
+      #toast.show { opacity: 1; }
+      /* ---- 榜单面板 ---- */
+      .board-list {
+        max-height: 46vh; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 4px;
+        margin: 10px 0 4px; padding-right: 4px;
+      }
+      .brow {
+        display: flex; align-items: center; gap: 10px;
+        background: #1e2432; border-radius: 8px;
+        padding: 7px 12px; font-size: 14px;
+      }
+      .brow .bk { width: 30px; text-align: center; flex-shrink: 0; }
+      .brow .bn { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .brow .bt { color: #8fd3ff; font-variant-numeric: tabular-nums; }
+      .race-btn {
+        padding: 4px 10px; font-size: 12px; border-radius: 8px;
+        background: #ffd23f; color: #4a3608; font-weight: 700;
+      }
+      .my-line { margin-top: 6px; color: #ffd23f !important; }
+      /* ---- 竖屏旋转提示遮罩 ---- */
+      #rotate-overlay {
+        position: fixed; inset: 0; z-index: 100;
+        display: none; flex-direction: column; align-items: center; justify-content: center;
+        gap: 18px;
+        background: linear-gradient(160deg, #141a33 0%, #2b2f55 60%, #4b3d6e 100%);
+        color: #e8ecf4; text-align: center;
+      }
+      #rotate-overlay.show { display: flex; }
+      #rotate-overlay .phone {
+        font-size: 64px;
+        animation: rot 1.6s ease-in-out infinite;
+        filter: drop-shadow(0 6px 16px rgba(0,0,0,.45));
+      }
+      @keyframes rot { 0%, 25% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+      #rotate-overlay .t1 { font-size: 20px; font-weight: 700; letter-spacing: .05em; }
+      #rotate-overlay .t2 { font-size: 13px; opacity: .7; }
+      /* ---- 移动端全屏按钮 ---- */
+      #btn-fs {
+        display: none;
+        position: absolute;
+        right: calc(12px + env(safe-area-inset-right));
+        bottom: calc(44px + env(safe-area-inset-bottom));
+        width: 42px; height: 42px;
+        align-items: center; justify-content: center;
+        border-radius: 12px;
+        background: rgba(30,36,54,.72); color: #cfd8ea;
+        font-size: 20px; pointer-events: auto;
+        backdrop-filter: blur(6px);
+      }
+      @media (pointer: coarse) { #btn-fs { display: flex; } }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="game"></div>
+      <div id="hud">
+        <div id="flash"></div>
+        <div class="hud-box" id="hud-stats"></div>
+        <div class="hud-box" id="hud-meta"></div>
+        <div class="hud-box" id="hud-hint">点按跳跃 · 长按跳更高 · R 重开</div>
+        <div class="hud-box" id="hud-mode">…</div>
+        <div id="result"><div class="panel" id="result-panel"></div></div>
+        <div id="toast"></div>
+        <button id="btn-fs" aria-label="全屏">⛶</button>
+      </div>
+      <div id="rotate-overlay">
+        <div class="phone">📱</div>
+        <div class="t1">横屏体验更佳</div>
+        <div class="t2">请旋转设备开始冲刺</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

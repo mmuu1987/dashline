@@ -1,0 +1,19 @@
+{
+  "name": "@dashline/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dashline/core": "workspace:*",
+    "@dashline/shared": "workspace:*",
+    "pixi.js": "^8.2.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8"
+  }
+}

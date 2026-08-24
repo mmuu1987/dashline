@@ -1,0 +1,146 @@
+/**
+ * 求解型 Bot v2：每个地面 tick 用 clone() 预演三条时间线（等待 / 点按跳 / 满蓄力跳），
+ * 选择活得更久（平局则更远）的那条。适配弹跳菇、低空刺梁、碎裂板。
+ */
+import { GROUND_Y, createWorld, type World } from '@dashline/core';
+import { encodeInputs, makeInput, seedForDate, todayUTC } from '@dashline/shared';
+
+const seed = seedForDate(todayUTC());
+const LOOKAHEAD = 200;
+
+/** 在克隆线上预演 depth ticks：
+ *  delay>0 时先等待（压过反应式，用于规划起跳位置），
+ *  首 tick 用决策输入，随后 postHold 电平，其余交给反应式策略 */
+function rollout(
+  clone: World,
+  firstInp: number,
+  postHold: number,
+  depth: number,
+  delay = 0,
+): [number, number] {
+  const x0 = clone.snapshot.x;
+  let hl = postHold;
+  let phase: 'delay' | 'first' | 'run' = delay > 0 ? 'delay' : 'first';
+  let dLeft = delay;
+  for (let i = 0; i < depth; i++) {
+    const s = clone.snapshot;
+    if (!s.alive || s.finished) return [i, s.x - x0];
+    let inp = 0;
+    if (phase === 'delay') {
+      inp = 0;
+      if (--dLeft === 0 || !s.grounded) phase = 'first';
+    } else if (phase === 'first') {
+      inp = firstInp;
+      phase = 'run';
+    } else if (hl > 0 && !s.grounded) {
+      inp = makeInput(false, true);
+      hl--;
+    } else if (s.grounded) {
+      const r = reactivePolicy(clone);
+      inp = r.inp;
+      hl = r.holdLeft;
+    }
+    clone.step(inp);
+  }
+  const s = clone.snapshot;
+  return [depth, s.x - x0];
+}
+function reactivePolicy(w: World): { inp: number; holdLeft: number } {
+  const x = w.snapshot.x;
+  let spikeAhead = false;
+  for (const hz of w.track.hazards) {
+    if (hz.y + hz.h > GROUND_Y - 60 && hz.x + hz.w < x - 10) continue; // 只看地面刺
+    if (hz.x > x + 150) break;
+    if (hz.y + hz.h <= GROUND_Y - 60) continue; // 悬梁不需要跳
+    if (hz.x + hz.w > x) spikeAhead = true;
+  }
+  let gapAhead = false;
+  for (const seg of w.track.grounds) {
+    if (x >= seg.x0 && x <= seg.x1 && seg.x1 - x < 60) gapAhead = true;
+  }
+  if (gapAhead) return { inp: makeInput(true, true), holdLeft: 18 };
+  if (spikeAhead) return { inp: makeInput(true, true), holdLeft: 3 };
+  return { inp: 0, holdLeft: 0 };
+}
+
+// ---- 求解主循环 ----
+
+export interface SolvedRun {
+  ok: boolean;
+  inputsB64: string;
+  score: number;
+  finished: boolean;
+  timeMs: number;
+  distanceM: number;
+  coins: number;
+}
+
+export function solveDaily(): SolvedRun {
+  const w = createWorld(seed);
+  const inputs: number[] = [];
+  let holding = false;
+  let holdLeft = 0;
+
+  while (w.snapshot.alive && !w.snapshot.finished && w.tick < 7200) {
+    const s = w.snapshot;
+    let inp = 0;
+    if (s.grounded) {
+      // 四选一：等 / 点按(hold2) / 满蓄力 / 延迟12tick满蓄力（规划起跳位置）
+      const rWait = rollout(w.clone(), 0, 0, LOOKAHEAD);
+      const rTap = rollout(w.clone(), makeInput(true, true), 2, LOOKAHEAD);
+      const rFull = rollout(w.clone(), makeInput(true, true), 15, LOOKAHEAD);
+      const rLate = rollout(w.clone(), makeInput(true, true), 15, LOOKAHEAD, 12);
+      const cands: Array<[string, number, number]> = [
+        ['wait', rWait[0], rWait[1]],
+        ['tap', rTap[0], rTap[1]],
+        ['full', rFull[0], rFull[1]],
+        ['late', rLate[0], rLate[1]],
+      ];
+      let bestName = 'wait';
+      let bestS = -1;
+      let bestX = -1;
+      for (const [name, surv, dx] of cands) {
+        if (surv > bestS || (surv === bestS && dx > bestX)) {
+          bestName = name;
+          bestS = surv;
+          bestX = dx;
+        }
+      }
+      if (bestName === 'full' || bestName === 'late') {
+        // late：本 tick 先不按，把"延迟后跳"交给后续 tick 的重新决策自然实现
+        inp = bestName === 'full' ? makeInput(true, true) : 0;
+        holding = bestName === 'full';
+        holdLeft = 15;
+      } else if (bestName === 'tap') {
+        inp = makeInput(true, true);
+        holding = true;
+        holdLeft = 2;
+      } else {
+        holding = false;
+      }
+    } else if (holding && holdLeft > 0) {
+      inp = makeInput(false, true);
+      holdLeft--;
+    } else {
+      holding = false;
+    }
+    w.step(inp);
+    inputs.push(inp);
+    if (!w.snapshot.alive || w.snapshot.finished) break;
+  }
+
+  const snap = w.snapshot;
+  return {
+    ok: snap.finished,
+    inputsB64: encodeInputs(Uint8Array.from(inputs)),
+    score: snap.score,
+    finished: snap.finished,
+    timeMs: snap.timeMs,
+    distanceM: snap.distanceM,
+    coins: snap.coinCount,
+  };
+}
+
+if (process.argv[1]?.replace(/\\/g, '/').endsWith('solve-bot.ts')) {
+  console.log(JSON.stringify(solveDaily()));
+}
