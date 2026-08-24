@@ -22,6 +22,18 @@ export interface GameAssets {
   spike: Texture;
   flagCloth: Texture;
   confetti: Texture;
+  /** Sunny Land（ansimuz, BSD-3 repo 编排 / 素材 free-for-commercial）↓ */
+  skyTopColor: number;
+  skyBottomColor: number;
+  forestLayer: Texture;
+  groundTop: Texture;
+  groundFill: Texture;
+  gemFrames: Texture[];
+  bush: Texture;
+  rock: Texture;
+  shrooms: Texture;
+  platformLong: Texture;
+  crate: Texture;
 }
 
 function canvasTexture(w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void): Texture {
@@ -185,6 +197,21 @@ function makeConfetti(): Texture {
 /** 资源 URL：拼上构建 base（dev='/'，Pages 子路径='./'），兼容任意部署目录 */
 const assetUrl = (p: string): string => import.meta.env.BASE_URL + p.replace(/^\//, '');
 
+/** 加载图片位图，并采样顶部/底部主色（供全屏天空渐变） */
+async function loadBitmap(url: string): Promise<{ bmp: ImageBitmap; top: number; bottom: number }> {
+  const res = await fetch(assetUrl(url));
+  const blob = await res.blob();
+  const bmp = await createImageBitmap(blob);
+  const cv = document.createElement('canvas');
+  cv.width = 1;
+  cv.height = 2;
+  const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(bmp, 0, 0, bmp.width, bmp.height, 0, 0, 1, 2);
+  const px = ctx.getImageData(0, 0, 1, 2).data;
+  const toHex = (r: number, g: number, b: number): number => (r << 16) | (g << 8) | b;
+  return { bmp, top: toHex(px[0]!, px[1]!, px[2]!), bottom: toHex(px[4]!, px[5]!, px[6]!) };
+}
+
 export async function loadAssets(): Promise<GameAssets> {
   const urls = [
     'assets/ground.png',
@@ -195,8 +222,23 @@ export async function loadAssets(): Promise<GameAssets> {
     'assets/gold.png',
     'assets/white.png',
     'assets/p-red.png',
+    // ---- Sunny Land（ansimuz）----
+    'assets/art/sky.png',
+    'assets/art/forest.png',
+    'assets/art/ground_top.png',
+    'assets/art/ground_fill.png',
+    'assets/art/gem-1.png',
+    'assets/art/gem-2.png',
+    'assets/art/gem-3.png',
+    'assets/art/gem-4.png',
+    'assets/art/bush.png',
+    'assets/art/rock.png',
+    'assets/art/shrooms.png',
+    'assets/art/platform_long.png',
+    'assets/art/crate.png',
   ] as const;
   const loaded = await Promise.all(urls.map((u) => Assets.load(assetUrl(u))));
+  const skyBmp = await loadBitmap('assets/art/sky.png');
   return {
     ground: loaded[0] as Texture,
     plank: loaded[1] as Texture,
@@ -213,5 +255,16 @@ export async function loadAssets(): Promise<GameAssets> {
     spike: makeSpike(34, 26),
     flagCloth: makeFlagCloth(),
     confetti: makeConfetti(),
+    skyTopColor: skyBmp.top,
+    skyBottomColor: skyBmp.bottom,
+    forestLayer: loaded[9] as Texture,
+    groundTop: loaded[10] as Texture,
+    groundFill: loaded[11] as Texture,
+    gemFrames: [loaded[12], loaded[13], loaded[14], loaded[15]] as Texture[],
+    bush: loaded[16] as Texture,
+    rock: loaded[17] as Texture,
+    shrooms: loaded[18] as Texture,
+    platformLong: loaded[19] as Texture,
+    crate: loaded[20] as Texture,
   };
 }

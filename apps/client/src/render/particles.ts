@@ -59,7 +59,7 @@ export class Particles {
   dust(x: number, y: number): void {
     for (let i = 0; i < 5; i++) {
       const a = Math.PI * (0.15 + Math.random() * 0.7) + (Math.random() < 0.5 ? Math.PI : 0);
-      this.spawn('whiteDot', 0xcfc3a8, x + (Math.random() - 0.5) * 10, y - 2,
+      this.spawn('whiteDot', 0x8f7355, x + (Math.random() - 0.5) * 10, y - 2,
         Math.cos(a) * (30 + Math.random() * 50), -Math.abs(Math.sin(a)) * (20 + Math.random() * 40),
         { g: 140, life: 0.45 + Math.random() * 0.25, scale: 0.06 + Math.random() * 0.05, alpha: 0.55, shrink: true });
     }

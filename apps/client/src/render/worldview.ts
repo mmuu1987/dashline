@@ -1,5 +1,5 @@
-/** 赛道静态化：地面平铺 / 平台 / 尖刺 / 金币 / 旗帜 / 草丛装饰 —— 每次进赛道构建一次。 */
-import { Container, Graphics, Sprite, TilingSprite } from 'pixi.js';
+/** 赛道静态化：地面双层平铺 / 平台 / 尖刺 / 宝石 / 旗帜 / 装饰散布 —— 每次进赛道构建一次。 */
+import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js';
 import { GROUND_Y, SPIKE_W, type Track } from '@dashline/core';
 import { splitmix32 } from '@dashline/shared';
 import { VIEW_H } from './consts.js';
@@ -32,43 +32,63 @@ export class WorldView {
     backdrop.rect(-400, GROUND_Y + 2, track.length + 800, VIEW_H - GROUND_Y + 80).fill(0x0c101c);
     this.root.addChild(backdrop);
 
-    // 地面段（无缝平铺草地砖）
+    // 地面段：草顶行 + 泥土填充（Sunny Land 16px tile × 2.5）
+    const GS = 2.5;
+    const TOP_H = 16 * GS;
     for (const seg of track.grounds) {
       const w = seg.x1 - seg.x0;
       if (w <= 0) continue;
-      const ts = new TilingSprite({ texture: this.assets.ground, width: w, height: VIEW_H - GROUND_Y + 40 });
-      ts.position.set(seg.x0, GROUND_Y);
-      this.root.addChild(ts);
-      // 顶部受光线
+      const top = new TilingSprite({ texture: this.assets.groundTop, width: w, height: TOP_H });
+      top.tileScale.set(GS);
+      top.position.set(seg.x0, GROUND_Y);
+      this.root.addChild(top);
+      const fillH = VIEW_H - GROUND_Y + 40 - TOP_H;
+      if (fillH > 0) {
+        const fill = new TilingSprite({ texture: this.assets.groundFill, width: w, height: fillH });
+        fill.tileScale.set(GS);
+        fill.position.set(seg.x0, GROUND_Y + TOP_H);
+        this.root.addChild(fill);
+      }
+      // 草顶受光边
       const lip = new Graphics();
-      lip.rect(0, 0, w, 3).fill({ color: 0xd9ffb0, alpha: 0.5 });
+      lip.rect(0, 0, w, 3).fill({ color: 0xd9ffb0, alpha: 0.35 });
       lip.position.set(seg.x0, GROUND_Y - 1);
       this.root.addChild(lip);
     }
 
-    // 浮空木板平台（碎裂板单独造型：暗色 + 裂纹）
+    // 浮空平台 / 碎裂板（木板平铺 + 碎裂裂纹）
     track.plats.forEach((p, idx) => {
       if (p.crumble) {
         const g = new Container();
-        const board = new Graphics();
-        board.roundRect(0, -12, p.w, 20, 5).fill(0x6e4c2a);
-        board.roundRect(0, -12, p.w, 20, 5).stroke({ width: 2, color: 0x3f2b16 });
-        // 裂纹
-        for (let cx = 14; cx < p.w; cx += 26) {
-          board.moveTo(cx, -12).lineTo(cx + 4, -2).lineTo(cx - 2, 8).stroke({ width: 1.5, color: 0x3f2b16 });
-        }
+        const board = new TilingSprite({
+          texture: this.assets.crate,
+          width: p.w,
+          height: 20,
+        });
+        board.tileScale.set(20 / 16);
+        board.alpha = 0.96;
         g.addChild(board);
+        const cracks = new Graphics();
+        for (let cx = 14; cx < p.w; cx += 26) {
+          cracks.moveTo(cx, -12).lineTo(cx + 4, -2).lineTo(cx - 2, 8).stroke({ width: 1.5, color: 0x2c1d0e });
+        }
+        cracks.roundRect(-2, -12, p.w + 4, 24, 5).stroke({ width: 2, color: 0x2c1d0e });
+        g.addChild(cracks);
         g.position.set(p.x, p.y);
         this.crumbleSprites[idx] = g;
         this.root.addChild(g);
         return;
       }
-      const pts = new TilingSprite({ texture: this.assets.plank, width: p.w, height: 22 });
-      pts.tileScale.set(22 / 64);
+      const pts = new TilingSprite({
+        texture: this.assets.platformLong,
+        width: p.w,
+        height: 22,
+      });
+      pts.tileScale.set(22 / 16);
       pts.position.set(p.x, p.y - 11);
       this.root.addChild(pts);
       const edge = new Graphics();
-      edge.roundRect(-2, 0, p.w + 4, 24, 6).stroke({ width: 2, color: 0x5b3d20 });
+      edge.roundRect(-2, 0, p.w + 4, 24, 6).stroke({ width: 2, color: 0x3f2b16 });
       edge.position.set(p.x, p.y - 12);
       this.root.addChild(edge);
     });
@@ -119,11 +139,11 @@ export class WorldView {
       this.root.addChild(base);
     }
 
-    // 金币
+    // 收集品：宝石（4 帧旋转动画）
     for (const c of track.coins) {
-      const s = new Sprite(this.assets.coin);
+      const s = new Sprite(this.assets.gemFrames[0]!);
       s.anchor.set(0.5);
-      s.scale.set((26 / 64) * 1.15);
+      s.scale.set(1.15 * (26 / 22));
       s.position.set(c.x, c.y);
       this.coinSprites.push(s);
       this.root.addChild(s);
@@ -142,14 +162,31 @@ export class WorldView {
     this.flagCloth = cloth;
     this.root.addChild(cloth);
 
-    // 草丛装饰（确定性随机，与种子无关也行——纯装饰）
+    // 地面装饰：草丛 + 石头/灌木/小蘑菇（确定性随机散布，避开弹跳菇区域）
     const r = splitmix32(Number(track.finishX));
     const tufts = new Graphics();
     for (const seg of track.grounds) {
-      let x = seg.x0 + 30 + r() * 120;
-      while (x < seg.x1 - 30) {
+      const props: Array<[Texture, number]> = [
+        [this.assets.rock, 0.9],
+        [this.assets.bush, 1.15],
+        [this.assets.shrooms, 1],
+      ];
+      const isPadZone = (x: number): boolean =>
+        track.pads.some((p) => x > p.x - 30 && x < p.x + p.w + 30);
+      let x = seg.x0 + 40 + r() * 140;
+      while (x < seg.x1 - 36) {
+        // 草丛
         const h = 7 + r() * 9;
-        tufts.moveTo(x, GROUND_Y).lineTo(x + 3.5, GROUND_Y - h).lineTo(x + 7, GROUND_Y).fill({ color: 0x9fd65e, alpha: 0.85 });
+        tufts.moveTo(x, GROUND_Y).lineTo(x + 3.5, GROUND_Y - h).lineTo(x + 7, GROUND_Y).fill({ color: 0x8fce56, alpha: 0.85 });
+        // 每 ~2 个草丛位尝试放一个道具
+        if (!isPadZone(x) && r() < 0.55) {
+          const [tex, sc] = props[Math.floor(r() * props.length)]!;
+          const s = new Sprite(tex);
+          s.anchor.set(0.5, 1);
+          s.scale.set(sc * (0.85 + r() * 0.3));
+          s.position.set(x + 20 + r() * 30, GROUND_Y + 2);
+          this.root.addChild(s);
+        }
         x += 90 + r() * 150;
       }
     }
@@ -200,14 +237,12 @@ export class WorldView {
   }
 
   update(tSec: number): void {
-    // 金币自旋（scaleX 余弦摆动）+ 浮沉由贴图本身表现
+    // 宝石旋转动画（4 帧 × ~8fps）+ 浮沉
     for (let i = 0; i < this.coinSprites.length; i++) {
       const s = this.coinSprites[i]!;
       if (!s.visible) continue;
-      const ph = tSec * 4 + i * 0.7;
-      s.scale.x = Math.abs(Math.cos(ph)) * 0.47 + 0.06;
-      s.scale.y = 0.47;
-      s.y += Math.sin(tSec * 2.6 + i) * 0.18; // 轻微浮动
+      s.texture = this.assets.gemFrames[Math.floor(tSec * 8 + i) % 4]!;
+      s.y += Math.sin(tSec * 2.6 + i) * 0.18;
     }
     // 弹跳菇呼吸（轻微压扁回弹）
     for (let i = 0; i < this.padCaps.length; i++) {
