@@ -41,6 +41,7 @@ import {
 } from './net.js';
 import { GameView, VIEW_H, VIEW_W } from './render.js';
 import { loadAssets } from './render/textures.js';
+import { exportShareCard, renderShareCard } from './share-card.js';
 
 const STEP_S = 1 / 60;
 
@@ -162,6 +163,7 @@ async function boot(): Promise<void> {
   let forcedOffer: GhostOffer | null = null;
   let startLabel = '';
   let startTimeMs: number | null = null;
+  let lastDelta: string | null = null;
 
   function armRacer(): void {
     const f = friend ?? null;
@@ -356,6 +358,7 @@ async function boot(): Promise<void> {
           ? `🟢 快过 ${who} ${((-d) / 1000).toFixed(2)}s！`
           : `🔴 慢于 ${who} ${(d / 1000).toFixed(2)}s`;
     }
+    lastDelta = delta;
     hud.showResult({
       finished: s.finished,
       timeMs: s.timeMs,
@@ -363,9 +366,34 @@ async function boot(): Promise<void> {
       coins: s.coinCount,
       ghostDelta: delta,
       onRetry: () => resetAttempt(),
+      onCard: () => void makeShareCard(),
       onShare: shareResult,
       onBoard: () => void openBoard(),
     });
+  }
+
+  /** 生成战报卡并复制/下载 */
+  async function makeShareCard(): Promise<void> {
+    hud.toast('战报图生成中…');
+    try {
+      const s = world.snapshot;
+      const cv = renderShareCard(assets, {
+        dateStr,
+        finished: s.finished,
+        timeMs: s.timeMs,
+        distanceM: s.distanceM,
+        score: s.score,
+        coins: s.coinCount,
+        attempts,
+        beatText: lastDelta,
+        url: `${location.origin}${location.pathname}`,
+      });
+      const how = await exportShareCard(cv, `dashline-${dateStr}.png`);
+      hud.toast(how === 'clipboard' ? '📸 战报图已复制，直接粘贴分享' : '📸 已下载战报图（剪贴板不可用）');
+    } catch (e) {
+      console.error(e);
+      hud.toast('战报图生成失败');
+    }
   }
 
   function handleEvents(events: SimEvent[]): void {

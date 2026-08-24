@@ -7,6 +7,7 @@ export interface ResultData {
   coins: number;
   ghostDelta: string | null;
   onRetry: () => void;
+  onCard: () => void;
   onShare: () => void;
   onBoard: () => void;
 }
@@ -68,10 +69,12 @@ export class Hud {
       ${ghost}
       <div class="btns">
         <button id="btn-retry">再跑一次</button>
+        <button id="btn-card" class="ghost-btn">📸 战报图</button>
         <button id="btn-share" class="ghost-btn">复制战绩</button>
         <button id="btn-board" class="ghost-btn">榜单</button>
       </div>`;
     document.getElementById('btn-retry')!.onclick = d.onRetry;
+    document.getElementById('btn-card')!.onclick = d.onCard;
     document.getElementById('btn-share')!.onclick = d.onShare;
     document.getElementById('btn-board')!.onclick = d.onBoard;
     this.resultEl.classList.add('show');
