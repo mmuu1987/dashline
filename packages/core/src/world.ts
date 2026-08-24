@@ -180,6 +180,9 @@ export class World {
     if (!this._alive || this._finished) return;
     this.tick++;
     if (this._boostLeft > 0) this._boostLeft--;
+    // 土狼时间逐 tick 衰减（修复：此前从未递减，导致离边后无限期可起跳、
+    // 空中误触满血跳、二段跳环分支永不生效 —— core.5 回归根因）
+    if (!this._grounded && this.coyote > 0) this.coyote--;
 
     // ---- 碎裂板倒计时（触发后持续计时，离开也不暂停）----
     for (let i = 0; i < this.platHp.length; i++) {

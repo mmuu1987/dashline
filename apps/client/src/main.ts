@@ -173,6 +173,7 @@ async function boot(): Promise<void> {
   let startLabel = '';
   let startTimeMs: number | null = null;
   let lastDelta: string | null = null;
+  let prevCharge = 0; // 蓄力音状态机（表现层）
 
   function armRacer(): void {
     const f = friend ?? null;
@@ -524,6 +525,30 @@ async function boot(): Promise<void> {
     const snap = world.snapshot;
     hud.update(snap.timeMs, snap.distanceM, snap.coinCount);
     view.sync(snap, racerDone ? null : racerWorld.snapshot, now / 1000);
+
+    // ---- 蓄力音状态机（纯表现层，不影响确定性）----
+    if (phase !== 'run') {
+      if (prevCharge > 0) {
+        sfx.chargeEnd(false);
+        prevCharge = 0;
+      }
+    } else {
+      const ch = snap.charge;
+      if (ch > 0.04 && prevCharge <= 0.04) {
+        sfx.chargeStart();
+      } else if (ch > 0.04) {
+        sfx.chargeUpdate(ch);
+      }
+      if (ch <= 0.04 && prevCharge > 0.04) {
+        const releasedFull = prevCharge >= 0.98;
+        sfx.chargeEnd(releasedFull);
+        if (releasedFull && snap.alive) {
+          view.addShake(2);
+          view.fx.coin(snap.x, snap.y); // 满蓄松手：金色迸发
+        }
+      }
+      prevCharge = ch;
+    }
   });
 
   resetAttempt();

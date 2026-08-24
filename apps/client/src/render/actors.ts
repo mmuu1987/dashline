@@ -77,6 +77,8 @@ export class BallActor {
 
   private getSurfaceY?: (x: number, fromY: number) => number | null;
   private chargeRing: Graphics | null = null;
+  private pulseT = 0;
+  private chargeV = 0;
 
   setState(snap: WorldSnapshot): void {
     if (this.hidden) return;
@@ -88,17 +90,30 @@ export class BallActor {
     this.roller.tint =
       (snap.boost ?? 0) > 0 ? 0xffd97a : this.ghostMode ? 0xaab6d8 : 0xffffff;
 
-    // 蓄力环：金色弧随蓄力进度增长
+    // 蓄力环：双层弧 + 进度变色 + 满蓄白闪脉冲
+    this.chargeV = snap.charge ?? 0;
     if (this.chargeRing) {
-      const c = snap.charge;
+      const c = this.chargeV;
       if (c > 0.04) {
+        this.pulseT += 0.16;
+        const full = c >= 1;
+        const r = PLAYER_R + 8 + (full ? Math.sin(this.pulseT) * 2.2 : 0);
+        const col = full ? 0xffffff : c > 0.6 ? 0xffd23f : 0xffe08a;
         const g = this.chargeRing;
         g.clear();
-        g.arc(0, 0, PLAYER_R + 8, -Math.PI / 2, -Math.PI / 2 + c * Math.PI * 2).stroke({
-          width: 3,
-          color: c >= 1 ? 0xffd23f : 0xffe08a,
-          alpha: 0.9,
+        // 已蓄部分
+        g.arc(0, 0, r, -Math.PI / 2, -Math.PI / 2 + c * Math.PI * 2).stroke({
+          width: full ? 5 : 4,
+          color: col,
+          alpha: 0.95,
         });
+        // 未蓄余量（暗弧，让"还差多少"一眼可读）
+        g.arc(0, 0, r, -Math.PI / 2 + c * Math.PI * 2, -Math.PI / 2 + Math.PI * 2).stroke({
+          width: 2,
+          color: col,
+          alpha: 0.16,
+        });
+        if (full) g.circle(0, 0, r + 7).stroke({ width: 1.5, color: 0xffd23f, alpha: 0.55 });
         g.visible = true;
       } else {
         this.chargeRing.visible = false;
@@ -118,6 +133,11 @@ export class BallActor {
     if (!snap.grounded && snap.vy < -250) {
       sy = Math.max(sy, 1.12);
       sx = Math.min(sx, 0.92);
+    }
+    // 蓄力中：球体向上绷紧（蓄力越满拉得越长，强化"蓄着劲"的体感）
+    if (this.chargeV > 0.04) {
+      sy *= 1 + this.chargeV * 0.14;
+      sx *= 1 - this.chargeV * 0.08;
     }
     this.root.scale.set(sx, sy);
 

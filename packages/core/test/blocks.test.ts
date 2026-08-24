@@ -3,7 +3,7 @@
  * 用 createWorldWithTrack 构造最小确定性赛道，脚本化输入验证机制成立。
  */
 import { describe, expect, it } from 'vitest';
-import { makeInput } from '@dashline/shared';
+import { HOLD_MAX_TICKS, makeInput } from '@dashline/shared';
 import {
   CRUMBLE_TICKS,
   GROUND_Y,
@@ -116,14 +116,13 @@ describe('积木：弹跳菇', () => {
   });
 
   it('跳上菇岛 → 自动弹射 → 跨过第二段（事件含 bounce）', () => {
-    const { track, pitStart, pitEnd } = padPitTrack();
+    const { track, pitEnd } = padPitTrack();
     const inputs = blank(600);
     jumpAt(inputs, 0, 0); // no-op 保持结构
-    // 在坑沿前 60px 起跳满蓄力
-    const takeoff = Math.round(pitStart - 60) - 80; // 减去出生点偏移近似
-    // 出生 x=80，tick i 时 x ≈ 80 + 6i；反推起跳 tick
-    const t0 = Math.round((pitStart - 60 - 80) / 6);
-    jumpAt(inputs, t0, 15);
+    // 动态瞄准：满蓄力正好落在菇岛中央（射程随调参变化也能命中）
+    const target = track.pads[0]!.x + 80;
+    const t0 = Math.round((target - holdJumpRange - 80) / 6);
+    jumpAt(inputs, t0, HOLD_MAX_TICKS);
     const r = run(track, inputs);
     expect(r.events).toContain('bounce');
     expect(r.alive).toBe(true);
@@ -161,7 +160,7 @@ describe('积木：低空刺梁', () => {
     const { track, spikeX } = lowBarTrack();
     const t0 = Math.round((spikeX - 135 - 80) / 6);
     const inputs = blank(600);
-    jumpAt(inputs, t0, 15); // 满蓄力
+    jumpAt(inputs, t0, HOLD_MAX_TICKS); // 满蓄力
     const r = run(track, inputs);
     expect(r.alive).toBe(false);
   });
@@ -190,13 +189,11 @@ describe('积木：碎裂板', () => {
     const { track } = crumbleBridgeTrack();
     // 跳上第一块板后不再起跳：滑行出板缘 → 落入板间坑
     const inputs = blank(900);
-    // 第一块板起点约在 cursor 435+15=450；在坑沿前 50px 满蓄力起跳
-    const pitEdge = 320 + 200; // 上面 run(320)+run(?) — 直接用探测式：尽早跳一次落在板上
-    void pitEdge;
-    // 找到第一块板的绝对位置：track.plats[0]
-    const p0 = track.plats[0]!;
-    const t0 = Math.round((p0.x - 60 - 80) / 6);
-    jumpAt(inputs, Math.max(t0, 1), 15);
+    // 动态瞄准：满蓄力落在第二块碎板中央（射程随调参变化也能命中）
+    const p1 = track.plats[1]!;
+    const target = p1.x + 57;
+    const t0 = Math.round((target - holdJumpRange - 80) / 6);
+    jumpAt(inputs, Math.max(t0, 1), HOLD_MAX_TICKS);
     const r = run(track, inputs, 1200);
     expect(r.alive).toBe(false); // 滑出碎板后坠坑
     expect(r.brokenCount).toBeGreaterThanOrEqual(1); // 板确实碎了

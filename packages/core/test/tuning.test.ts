@@ -45,12 +45,12 @@ describe('调参护栏（tuning guardrails）', () => {
     expect(SPIKE_H * 2).toBeLessThan(tapJumpHeight);
   });
 
-  it('滞空时间合理：点按 0.6~0.9s，长按 ≤1.1s（空中不可控感上限）', () => {
+  it('滞空时间合理：点按 0.6~0.9s，长按 ≤1.15s（空中不可控感上限）', () => {
     expect(tapAirTime).toBeGreaterThanOrEqual(0.6);
     expect(tapAirTime).toBeLessThanOrEqual(0.9);
-    expect(holdAirTime).toBeLessThanOrEqual(1.1);
-    // 长按距离优势要明显但不夸张
-    expect(holdJumpRange / tapJumpRange).toBeGreaterThanOrEqual(1.15);
-    expect(holdJumpRange / tapJumpRange).toBeLessThanOrEqual(1.45);
+    expect(holdAirTime).toBeLessThanOrEqual(1.15);
+    // 长按距离优势要明显（core.5 调参刻意拉大蓄力反差，上限放宽到 1.65）
+    expect(holdJumpRange / tapJumpRange).toBeGreaterThanOrEqual(1.3);
+    expect(holdJumpRange / tapJumpRange).toBeLessThanOrEqual(1.65);
   });
 });

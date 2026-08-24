@@ -134,6 +134,59 @@ export class Sfx {
     src.start(t);
   }
 
+  // ---- 蓄力音（随进度爬升的持续音 + 满蓄释放"锵"）----
+  private chargeOsc: OscillatorNode | null = null;
+  private chargeGain: GainNode | null = null;
+
+  chargeStart(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.master || ctx.state !== 'running' || this.chargeOsc) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = 300;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.028, ctx.currentTime + 0.05);
+    o.connect(g).connect(this.master);
+    o.start();
+    this.chargeOsc = o;
+    this.chargeGain = g;
+  }
+
+  chargeUpdate(progress: number): void {
+    if (!this.chargeOsc || !this.ctx) return;
+    // 300Hz → 1000Hz 随蓄力进度爬升，耳朵能直接读出档位
+    this.chargeOsc.frequency.setTargetAtTime(
+      300 + Math.min(1, Math.max(0, progress)) * 700,
+      this.ctx.currentTime,
+      0.02,
+    );
+  }
+
+  chargeEnd(releasedFull: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (this.chargeOsc && this.chargeGain) {
+      const t = ctx.currentTime;
+      this.chargeGain.gain.setTargetAtTime(0.0001, t, 0.015);
+      const o = this.chargeOsc;
+      setTimeout(() => {
+        try {
+          o.stop();
+        } catch {
+          /* 已停止 */
+        }
+      }, 80);
+      this.chargeOsc = null;
+      this.chargeGain = null;
+    }
+    if (releasedFull) {
+      // 满蓄释放：明亮双音"锵"
+      this.beep(1318, 0.1, 'sine', 0.055);
+      setTimeout(() => this.beep(1760, 0.14, 'sine', 0.045), 60);
+    }
+  }
+
   // ---- BGM：Am-F-C-G 芯片小循环（132bpm，八分音符步进）----
   private static readonly BASS_ROOTS = [45, 45, 41, 41, 48, 48, 43, 43]; // A2 F2 C3 G2
   private static readonly LEAD = [

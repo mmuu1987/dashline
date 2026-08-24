@@ -3,7 +3,7 @@
  * 与 blocks.test.ts 同一套迷你 Builder + 脚本化输入方法。
  */
 import { describe, expect, it } from 'vitest';
-import { makeInput } from '@dashline/shared';
+import { HOLD_MAX_TICKS, makeInput } from '@dashline/shared';
 import {
   BOOST_TICKS,
   GROUND_Y,
@@ -88,6 +88,8 @@ function jumpAt(inputs: Uint8Array, at: number, hold: number): void {
   inputs[at] = makeInput(true, true);
   for (let k = 1; k < hold; k++) inputs[at + k] = makeInput(false, true);
 }
+/** 出生点 x=80，每 tick 前进 6px：反推"从 x 起跳"的 tick */
+const tickForX = (x: number): number => Math.round((x - 80) / 6);
 
 /* ---------------- 加速带 ---------------- */
 
@@ -109,7 +111,7 @@ describe('积木：加速带', () => {
   it('无加速带时，满蓄力跳不过超宽坑（物理不可能）', () => {
     const { track, pitStart, pitEnd } = boostTrack(false);
     const inputs = blank(900);
-    jumpAt(inputs, Math.round((pitStart - 20 - 80) / 6), 15);
+    jumpAt(inputs, tickForX(pitStart - 20), HOLD_MAX_TICKS);
     const r = run(track, inputs);
     expect(r.alive).toBe(false);
     expect(r.x).toBeLessThan(pitEnd);
@@ -117,12 +119,21 @@ describe('积木：加速带', () => {
 
   it('踩带加速 → 满蓄力跳飞跃同一宽度的坑', () => {
     const { track, pitStart, pitEnd } = boostTrack(true);
-    const inputs = blank(900);
-    jumpAt(inputs, Math.round((pitStart - 20 - 80) / 6), 15);
-    const r = run(track, inputs);
-    expect(r.events.some((e) => e.type === 'boost')).toBe(true);
-    expect(r.alive).toBe(true);
-    expect(r.x).toBeGreaterThan(pitEnd + 30);
+    // 加速段速度 9.3px/tick 与常规 6px/tick 混合，解析反推脆弱 —— 改为小窗口搜索有效起跳点
+    let crossed = false;
+    for (let t0 = 50; t0 <= 95 && !crossed; t0++) {
+      const inputs = blank(900);
+      jumpAt(inputs, t0, HOLD_MAX_TICKS);
+      const r = run(track, inputs);
+      if (
+        r.alive &&
+        r.events.some((e) => e.type === 'boost') &&
+        r.x > pitEnd + 30
+      ) {
+        crossed = true;
+      }
+    }
+    expect(crossed).toBe(true);
   });
 
   it('增益持续期有限（BOOST_TICKS 后快照归零）', () => {
@@ -132,12 +143,14 @@ describe('积木：加速带', () => {
     b.run(1200);
     const w = createWorldWithTrack(1n, b.track());
     let sawBoost = false;
+    let triggerTick = -1;
     for (let i = 0; i < 600; i++) {
       w.step(0);
-      if (w.snapshot.boost > 0) sawBoost = true;
-      if (i > 320 && w.snapshot.boost > 0 && i > 320 + BOOST_TICKS) {
-        throw new Error('boost 超时未清零');
+      if (triggerTick < 0 && w.snapshot.boost > 0) triggerTick = w.tick;
+      if (triggerTick >= 0 && w.tick > triggerTick + BOOST_TICKS) {
+        expect(w.snapshot.boost).toBe(0); // 到期必须清零
       }
+      if (w.snapshot.boost > 0) sawBoost = true;
     }
     expect(sawBoost).toBe(true);
   });
@@ -153,8 +166,8 @@ function ringTrack(withRing: boolean): { track: Track; pitStart: number; pitEnd:
   b.gap(W);
   const pitEnd = b.cursor;
   if (withRing) {
-    const dxr = W * 0.52;
-    // 与 chRing 同款：环贴在满蓄力弧线上（玩家中心高度）
+    const dxr = W * 0.5;
+    // 与 chRing 同款：环贴在弧线顶点走廊（玩家中心高度）
     const arcH = holdArcHeightAt(dxr) ?? 150;
     b.rings.push({ x: pitStart + dxr, y: GROUND_Y - 16 - arcH, got: false });
   }
@@ -166,7 +179,7 @@ describe('积木：二段跳环', () => {
   it('单次满蓄力跳不过 1.28 倍坑（无环必死）', () => {
     const { track, pitEnd } = ringTrack(false);
     const inputs = blank(900);
-    jumpAt(inputs, Math.round((420 - 20 - 80) / 6), 15);
+    jumpAt(inputs, tickForX(420 - 20), HOLD_MAX_TICKS);
     const r = run(track, inputs);
     expect(r.alive).toBe(false);
     expect(r.x).toBeLessThan(pitEnd);
@@ -175,12 +188,12 @@ describe('积木：二段跳环', () => {
   it('空中拾环 → 二段跳接力过坑（ring+djump 事件齐备）', () => {
     const { track, pitEnd } = ringTrack(true);
     const ring = track.rings[0]!;
-    const t0 = Math.round((420 - 20 - 80) / 6);
+    const t0 = tickForX(420 - 20);
     // 空中跳时机：到达环 x 之后立刻（x ≈ 6tick/px）
     const tDj = t0 + Math.round((ring.x - 420) / 6) + 2;
     const inputs = blank(900);
-    jumpAt(inputs, t0, 15);
-    jumpAt(inputs, tDj, 12);
+    jumpAt(inputs, t0, HOLD_MAX_TICKS);
+    jumpAt(inputs, tDj, HOLD_MAX_TICKS);
     const r = run(track, inputs);
     expect(r.events.some((e) => e.type === 'ring')).toBe(true);
     expect(r.events.some((e) => e.type === 'djump')).toBe(true);
@@ -191,10 +204,10 @@ describe('积木：二段跳环', () => {
   it('二段跳一次性：空中连按两次只触发一次 djump', () => {
     const { track } = ringTrack(true);
     const ring = track.rings[0]!;
-    const t0 = Math.round((420 - 20 - 80) / 6);
+    const t0 = tickForX(420 - 20);
     const tDj = t0 + Math.round((ring.x - 420) / 6) + 2;
     const inputs = blank(900);
-    jumpAt(inputs, t0, 15);
+    jumpAt(inputs, t0, HOLD_MAX_TICKS);
     jumpAt(inputs, tDj, 3);
     jumpAt(inputs, tDj + 8, 3); // 第二次空中按（已无次数）
     const r = run(track, inputs);
@@ -230,12 +243,12 @@ describe('积木：升降平台', () => {
 
   it('落在升降台上可持续随行（贴合运动台面直到滑出边缘）', () => {
     const { track, plat } = elevatorTrack();
-    // 满蓄力射程 ~348px：要落进 [360,530]，起跳点须在 [15,185] → t0 ∈ [0,17]
+    // 满蓄力射程 ~388px：要落进 [360,530]，起跳点须在 [-28,142] → 扫一批候选
     let landed = false;
-    for (let t0 = 2; t0 <= 24 && !landed; t0++) {
+    for (let t0 = 1; t0 <= 26 && !landed; t0++) {
       const w = createWorldWithTrack(1n, track);
       const inputs = blank(400);
-      jumpAt(inputs, t0, 15);
+      jumpAt(inputs, t0, HOLD_MAX_TICKS);
       let riding = false;
       let ok = false;
       for (let i = 0; i < inputs.length + 120; i++) {

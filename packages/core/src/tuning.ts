@@ -24,8 +24,8 @@ export const TUNING = {
   jumpV: 760,
   /** 重力 px/s²（越大越"重"，越小越"飘"） */
   grav: 2150,
-  /** 长按上升段重力系数：<1 跳更高；1 = 无长按差异 */
-  holdGravFactor: 0.4,
+  /** 长按上升段重力系数：<1 跳更高；1 = 无长按差异（0.34 → 满蓄 ≈ 2.05× 点按高度） */
+  holdGravFactor: 0.34,
   /** 弹跳菇弹射初速系数（相对 jumpV） */
   bounceFactor: 1.32,
 } as const;
