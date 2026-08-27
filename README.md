@@ -14,6 +14,7 @@
 
 ## 文档导航
 
+- [HANDOVER.md](./HANDOVER.md) — 📋 **维护者交接书**：红线规则、本地速查、发布流程、待办清单（新接手先读这个）
 - [docs/game-design.md](./docs/game-design.md) — 游戏架构：玩法、模式、元游戏、数值、传播与商业化
 - [docs/tech-architecture.md](./docs/tech-architecture.md) — 技术架构：选型、Monorepo、确定性模拟、网络与后端、部署
 - [docs/api-and-data.md](./docs/api-and-data.md) — API 契约、数据模型、反作弊、排行榜实现
@@ -77,8 +78,10 @@ DATABASE_URL=postgres://dashline:dashline@127.0.0.1:55432/dashline pnpm --filter
 
 ```bash
 pnpm --filter @dashline/api exec tsx scripts/e2e-ghosts.ts    # 完赛上榜→Ghost下发→链接回环
-E2E_BASE=http://127.0.0.1:8788 pnpm --filter @dashline/api exec tsx scripts/e2e-attempts.ts  # 计次限制
+E2E_BASE=http://127.0.0.1:8787 pnpm --filter @dashline/api exec tsx scripts/e2e-attempts.ts  # 计次限制
 ```
+
+> 注意：API 默认端口 8787；若 8787 被历史残留进程抢占（见 HANDOVER.md §4），先清端口再跑。
 
 ## Monorepo 结构
 
