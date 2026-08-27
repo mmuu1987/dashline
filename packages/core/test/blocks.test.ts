@@ -51,6 +51,8 @@ class TB {
       pads: this.pads,
       boosts: [],
       rings: [],
+      winds: [],
+      pendulums: [],
       finishX,
       length: this.cursor,
     };

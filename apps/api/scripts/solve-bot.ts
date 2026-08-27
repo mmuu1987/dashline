@@ -5,12 +5,68 @@
 import { GROUND_Y, PLAYER_R, createWorld, type World } from '@dashline/core';
 import { HOLD_MAX_TICKS, encodeInputs, makeInput, seedForDate, todayUTC } from '@dashline/shared';
 
+/** 落点宽容（与 world.ts 支撑判定一致：±0.6R） */
+const EDGE_FORGIVE_PX = PLAYER_R * 0.6;
+
 const seed = seedForDate(todayUTC());
 const LOOKAHEAD = 200;
 
 /** 在克隆线上预演 depth ticks：
  *  delay>0 时先等待（压过反应式，用于规划起跳位置），
  *  首 tick 用决策输入，随后 postHold 电平，其余交给反应式策略 */
+/** 滞空专用反射：
+ *  1) 恐慌二段跳（环授予的自救次数，由脚本层记账）；
+ *  2) 坠落抢救：前方 ~110px 内出现新地面段起点（小岛/分段尽头落水前），土狼窗口内按跳。
+ *  是否持有空中跳由脚本层记账（seenRings）决定，规则纯几何、确定性。 */
+function airborneReflect(w: World, hasAirJump: boolean): number {
+  const s = w.snapshot;
+  if (
+    hasAirJump &&
+    !s.grounded &&
+    s.vy > 0 &&
+    s.y + PLAYER_R > GROUND_Y - 24
+  ) {
+    return makeInput(true, true);
+  }
+  if (
+    !s.grounded &&
+    s.vy > 0 &&
+    s.vy < 420 &&
+    s.y + PLAYER_R >= GROUND_Y - 2 &&
+    s.y + PLAYER_R < GROUND_Y + 28
+  ) {
+    // 当前所站的段（或刚离开的段）尽头就在前方 → 提前起跳越过，避免落水
+    for (const seg of w.track.grounds) {
+      if (s.x > seg.x0 - 30 && s.x < seg.x1 + 110) {
+        const d = seg.x1 - s.x;
+        if (d > -70 && d < 110) return makeInput(true, true);
+      }
+    }
+  }
+  return 0;
+}
+
+/** 脚本层记账：本 tick 是否新进入任一未记账环的捕获窗（±32），进入则计数+1 */
+function trackRings(
+  w: World,
+  entered: Set<number>,
+  count: { n: number },
+): void {
+  const s = w.snapshot;
+  const rings = w.track.rings;
+  for (let i = 0; i < rings.length; i++) {
+    if (entered.has(i)) continue;
+    const rg = rings[i]!;
+    if (
+      Math.abs(rg.x - s.x) < 32 &&
+      Math.abs(rg.y - s.y) < 32
+    ) {
+      entered.add(i);
+      count.n = Math.min(2, count.n + 1);
+    }
+  }
+}
+
 function rollout(
   clone: World,
   firstInp: number,
@@ -22,6 +78,9 @@ function rollout(
   let hl = postHold;
   let phase: 'delay' | 'first' | 'run' = delay > 0 ? 'delay' : 'first';
   let dLeft = delay;
+  // 继承当前已拾取的环数（按快照 ringsGot），并随预演推进记账
+  const entered = new Set<number>(clone.snapshot.ringsGot);
+  const count = { n: clone.snapshot.ringsGot.length };
   for (let i = 0; i < depth; i++) {
     const s = clone.snapshot;
     // 完赛压倒一切（越快分越高），其余按存活 tick 数
@@ -37,15 +96,20 @@ function rollout(
     } else if (hl > 0 && !s.grounded) {
       inp = makeInput(false, true);
       hl--;
+    } else if (!s.grounded) {
+      // 滞空反射：只有恐慌二段跳参与预演
+      inp = airborneReflect(clone, count.n > 0);
+      if (inp !== 0) count.n--;
     } else if (s.grounded) {
       const r = reactivePolicy(clone);
       inp = r.inp;
       hl = r.holdLeft;
     }
     clone.step(inp);
+    trackRings(clone, entered, count);
   }
-  const s = clone.snapshot;
-  return [s.finished ? 1_000_000 : depth, s.x - x0];
+  const s2 = clone.snapshot;
+  return [s2.finished ? 1_000_000 : depth, s2.x - x0];
 }
 function reactivePolicy(w: World): { inp: number; holdLeft: number } {
   const s = w.snapshot;
@@ -105,10 +169,19 @@ export function solveDaily(): SolvedRun {
   let holdLeft = 0;
   /** 已承诺的"延迟起跳"剩余等待 tick —— 防止每 tick 重评估导致无限拖延 */
   let pendingLate = 0;
+  // 脚本层二段跳记账
+  const ringEntered = new Set<number>();
+  const ringCount = { n: 0 };
 
   while (w.snapshot.alive && !w.snapshot.finished && w.tick < 7200) {
     const s = w.snapshot;
     let inp = 0;
+    if (process.env.SOLVE_DEBUG === '1' && w.tick > 2270 && w.tick < 2345) {
+      console.log(
+        'pre t=' + s.tick + ' x=' + Math.round(s.x) + ' gnd=' + (s.grounded ? 1 : 0) +
+          ' pLate=' + pendingLate + ' holding=' + holding + ' hl=' + holdLeft,
+      );
+    }
     if (!s.grounded) {
       pendingLate = 0; // 计划赶不上变化：离地即作废
       if (holding && holdLeft > 0) {
@@ -116,6 +189,14 @@ export function solveDaily(): SolvedRun {
         holdLeft--;
       } else {
         holding = false;
+        // 滞空反射：仅恐慌二段跳（press 后保持 HELD 以吃满蓄力延伸）
+        const refl = airborneReflect(w, ringCount.n > 0);
+        if (refl !== 0) {
+          inp = refl;
+          holding = true;
+          holdLeft = HOLD_MAX_TICKS;
+          ringCount.n--;
+        }
       }
     } else if (pendingLate > 0) {
       // ---- 兑现 late 承诺：倒计时结束立刻满蓄力起跳 ----
@@ -127,6 +208,30 @@ export function solveDaily(): SolvedRun {
         holdLeft = HOLD_MAX_TICKS;
       }
     } else {
+      // ---- 坑沿强制起飞窗口：按下一坑宽度动态化（388 满蓄射程 − 有效坑宽 − 余量），
+      //      候选投票在悬崖边不可信（历史多起事故），到点无条件满蓄起跳 ----
+      let segEndDist = Infinity;
+      let nextGap = 0;
+      for (let gi = 0; gi < w.track.grounds.length; gi++) {
+        const seg = w.track.grounds[gi]!;
+        if (s.x >= seg.x0 && s.x <= seg.x1) {
+          segEndDist = seg.x1 - s.x;
+          const nxt = w.track.grounds[gi + 1];
+          if (nxt && nxt.x0 > seg.x1) nextGap = nxt.x0 - seg.x1;
+        }
+      }
+      const effNeed = Math.max(0, nextGap);
+      // 收窄 100px：既保证普通坑有足量射程，又让菇岛落点偏右（弹射才能过第二段）
+      const fireDist = Math.min(190, Math.max(25, 388 - effNeed - 100));
+      const edgeForced = segEndDist < fireDist;
+      if (edgeForced) {
+        inp = makeInput(true, true);
+        holding = true;
+        holdLeft = HOLD_MAX_TICKS;
+        if (process.env.SOLVE_DEBUG === '1')
+          console.log(`[forced] t=${w.tick} x=${Math.round(s.x)} segEnd=${segEndDist.toFixed(0)} gap=${Math.round(nextGap)} fireAt=${fireDist}`);
+      }
+      if (!edgeForced) {
       // 四选一：等 / 点按(hold2) / 满蓄力 / 延迟12tick满蓄力（规划起跳位置）
       const rWait = rollout(w.clone(), 0, 0, LOOKAHEAD);
       const rTap = rollout(w.clone(), makeInput(true, true), 2, LOOKAHEAD);
@@ -149,10 +254,11 @@ export function solveDaily(): SolvedRun {
         }
       }
       const DBG = process.env.SOLVE_DEBUG === '1';
-      if (DBG && w.tick > 360 && w.tick < 430) {
+      void DBG;
+      if (DBG && w.tick > 2760 && w.tick < 2840) {
         console.log(
-          `t=${w.tick} x=${Math.round(s.x)} best=${bestName} scores=` +
-            cands.map((c) => `${c[0]}:${c[1]}/${Math.round(c[2])}`).join(' '),
+          't=' + w.tick + ' x=' + Math.round(s.x) + ' best=' + bestName +
+            ' scores=' + [rWait[0], rTap[0], rFull[0], rLate[0]].join('/'),
         );
       }
       if (bestName === 'full') {
@@ -179,9 +285,12 @@ export function solveDaily(): SolvedRun {
           holdLeft = rr.holdLeft;
         }
       }
+      } // end !edgeForced
     }
     w.step(inp);
     inputs.push(inp);
+    trackRings(w, ringEntered, ringCount);
+    w.takeEvents();
     if (!w.snapshot.alive || w.snapshot.finished) break;
   }
 

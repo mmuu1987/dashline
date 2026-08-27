@@ -12,6 +12,8 @@ import {
 } from '@dashline/shared';
 import {
   PLAYER_R,
+  PENDULUM_R,
+  UPDRAFT_G_FACTOR,
   boostRange,
   bounceHeight,
   bounceRange,
@@ -20,6 +22,7 @@ import {
   holdJumpRange,
   tapJumpHeight,
   type MoverDef,
+  type PendulumDef,
 } from './tuning.js';
 
 /** 世界常量（渲染层也从这里取） */
@@ -69,6 +72,14 @@ export interface Ring {
   y: number;
   got: boolean;
 }
+/** 气流柱：矩形区域，位于其中时重力 ×factor（飞出柱顶恢复正常重力） */
+export interface WindZone {
+  x: number;
+  w: number;
+  /** 柱高（自地面向上），顶 = GROUND_Y - h */
+  h: number;
+  factor: number;
+}
 export interface Track {
   grounds: GroundSeg[];
   hazards: Hazard[];
@@ -77,6 +88,8 @@ export interface Track {
   pads: Pad[];
   boosts: BoostZone[];
   rings: Ring[];
+  winds: WindZone[];
+  pendulums: PendulumDef[];
   finishX: number;
   length: number;
 }
@@ -92,6 +105,8 @@ class Builder {
   pads: Pad[] = [];
   boosts: BoostZone[] = [];
   rings: Ring[] = [];
+  winds: WindZone[] = [];
+  pendulums: PendulumDef[] = [];
 
   run(dx: number): void {
     this.cursor += dx;
@@ -278,20 +293,89 @@ function chBoost(b: Builder, r: Rng): void {
   b.run(rngRange(r, 120, 180));
 }
 
-/** 二段跳环：超宽坑（>满蓄力射程），环摆在坑中央的弧线顶点走廊 ——
- *  起跳点前后漂移 ~60px 都能吃到，空中接力二段跳过剩余。 */
+/** 二段跳环：超宽坑（>满蓄力射程），沿低空坠落走廊铺"阶梯环带"
+ *  （四枚、高度150→84、捕获窗两两衔接）—— 无论起跳早晚弧线必扫中一枚，
+ *  拾取点已接近坠线、剩程极短，二段跳轻松登岸。 */
 function chRing(b: Builder, r: Rng): void {
   b.run(rngRange(r, 150, 220));
   const W = Math.round(holdJumpRange * rngRange(r, 1.22, 1.38)); // 单跳必死
   const gx = b.cursor;
   b.gap(W);
-  // 弧线在顶点附近很平：取"顶点高度略下"作为环心，水平放在坑中央
-  b.rings.push({
-    x: gx + W * 0.5,
-    y: GROUND_Y - holdJumpHeight - PLAYER_R + 14,
-    got: false,
+  const hs = [150, 128, 106, 84]; // 距地高度（低位走廊）
+  const fr = [0.5, 0.62, 0.74, 0.85];
+  for (let i = 0; i < 4; i++) {
+    b.rings.push({ x: gx + W * fr[i]!, y: GROUND_Y - hs[i]!, got: false });
+  }
+  b.coins.push({ x: gx + W * 0.93, y: GROUND_Y - 92, got: false });
+  b.run(rngRange(r, 140, 200));
+}
+
+/** 上升气流柱：超宽坑上方整片减重区 —— 满蓄力一跃冲天，扶摇直上吃高空宝石；
+ *  飞出柱顶即恢复正常重力抛物线落向对岸。 */
+function chUpdraft(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 150, 220));
+  // 1.18~1.34 倍射程，扣除 40px 对岸搁板后仍保证"裸跳必死"
+  const W = Math.round(holdJumpRange * rngRange(r, 1.18, 1.34));
+  const gx = b.cursor;
+  b.gap(W - 40); // 对岸搁板：多给 40px 落点容错
+  b.run(40);
+  // 柱体覆盖全坑并向两侧各探出 40px
+  const h = 250;
+  b.winds.push({
+    x: gx - 40,
+    w: W + 80,
+    h,
+    factor: UPDRAFT_G_FACTOR,
   });
-  b.coins.push({ x: gx + W * 0.78, y: GROUND_Y - 150, got: false });
+  // 高空宝石阶梯：贴着柱内攀升路线摆放
+  b.coins.push(
+    { x: gx + W * 0.25, y: GROUND_Y - 130, got: false },
+    { x: gx + W * 0.5, y: GROUND_Y - 205, got: false },
+    { x: gx + W * 0.72, y: GROUND_Y - 165, got: false },
+  );
+  b.run(rngRange(r, 140, 200));
+}
+
+/** 横扫钉球：铁链吊球沿走廊横扫、两端下沉封路 —— 掐准它抬升回中的窗口冲刺。 */
+function chPendulum(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 160, 240));
+  const CW = 230; // 走廊宽
+  const startX = b.cursor;
+  b.pendulums.push({
+    x0: startX + 26,
+    x1: startX + CW - 26,
+    highY: GROUND_Y - 118,
+    lowY: GROUND_Y - 36,
+    r: PENDULUM_R,
+    periodTicks: Math.round(rngRange(r, 150, 190)),
+    phase: Math.round(rngRange(r, 0, 149)),
+  });
+  b.coins.push(
+    { x: startX + CW * 0.32, y: GROUND_Y - 62, got: false },
+    { x: startX + CW * 0.5, y: GROUND_Y - 70, got: false },
+    { x: startX + CW * 0.68, y: GROUND_Y - 62, got: false },
+  );
+  b.run(CW);
+  b.run(rngRange(r, 140, 200));
+}
+
+/** 碎裂天梯：三层碎裂板逐级攀升，踩板即倒计时 —— 一路小跳别回头，顶端高币犒赏节奏大师。 */
+function chCrumbleStairs(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 130, 200));
+  const plankW = 118;
+  const gapX = 78;
+  const n = 3;
+  const tailDrop = 130; // 第三块板后到对岸的空隙
+  const total = n * plankW + (n - 1) * gapX + tailDrop;
+  const pitX = b.cursor;
+  b.gap(total);
+  const ys = [64, 128, 192];
+  for (let i = 0; i < n; i++) {
+    const px = pitX + i * (plankW + gapX);
+    const py = GROUND_Y - ys[i]!;
+    b.plats.push({ x: px, y: py, w: plankW, crumble: true });
+    b.coins.push({ x: px + plankW / 2, y: py - 40, got: false });
+  }
   b.run(rngRange(r, 140, 200));
 }
 
@@ -310,7 +394,10 @@ type ChunkName =
   | 'crumble'
   | 'elevator'
   | 'boost'
-  | 'ring';
+  | 'ring'
+  | 'updraft'
+  | 'pendulum'
+  | 'crumblestairs';
 
 function pickChunk(b: Builder, r: Rng): void {
   const names: ChunkName[] = ['flat', 'flat', 'gap0', 'spike0', 'stairs'];
@@ -323,10 +410,16 @@ function pickChunk(b: Builder, r: Rng): void {
   if (p >= 0.35) {
     names.push('padpit', 'crumble', 'elevator');
     weights.push(1, 2, 2);
+    // 'updraft' 暂缓入池：浮空落点窗口过窄（±40px 量级），Bot 与新手都易坠，
+    // 手感调优后再开放（代码/测试保留）。
+  }
+  if (p >= 0.45) {
+    names.push('crumblestairs');
+    weights.push(1);
   }
   if (p >= 0.55) {
-    names.push('gap2', 'spike2', 'boost', 'ring');
-    weights.push(2, 2, 2, 2);
+    names.push('gap2', 'spike2', 'boost', 'ring', 'pendulum');
+    weights.push(2, 2, 2, 2, 2);
   }
   const name = names[rngPickWeighted(r, weights)]!;
   switch (name) {
@@ -360,6 +453,12 @@ function pickChunk(b: Builder, r: Rng): void {
       return chBoost(b, r);
     case 'ring':
       return chRing(b, r);
+    case 'updraft':
+      return chUpdraft(b, r);
+    case 'pendulum':
+      return chPendulum(b, r);
+    case 'crumblestairs':
+      return chCrumbleStairs(b, r);
   }
 }
 
@@ -380,6 +479,8 @@ export function buildTrack(seed: bigint): Track {
     pads: b.pads.sort((a, z) => a.x - z.x),
     boosts: b.boosts.sort((a, z) => a.x - z.x),
     rings: b.rings.sort((a, z) => a.x - z.x),
+    winds: b.winds.sort((a, z) => a.x - z.x),
+    pendulums: b.pendulums.sort((a, z) => a.x0 - z.x0),
     finishX,
     length: b.cursor,
   };

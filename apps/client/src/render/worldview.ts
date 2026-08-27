@@ -1,6 +1,6 @@
 /** 赛道静态化：地面双层平铺 / 平台 / 尖刺 / 宝石 / 旗帜 / 装饰散布 —— 每次进赛道构建一次。 */
 import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js';
-import { GROUND_Y, SPIKE_W, moverOffsetY, type Track } from '@dashline/core';
+import { GROUND_Y, SPIKE_W, moverOffsetY, pendulumBob, type Track } from '@dashline/core';
 import { splitmix32 } from '@dashline/shared';
 import { VIEW_H } from './consts.js';
 import type { GameAssets } from './textures.js';
@@ -29,6 +29,9 @@ export class WorldView {
     zx: number;
     zw: number;
   }> = [];
+  /** 横扫钉球：球容器 + 链条（随 simTick 摆动） */
+  private pendulumSprites: (Container | null)[] = [];
+  private pendulumChains: (Graphics | null)[] = [];
 
   constructor(private assets: GameAssets) {}
 
@@ -43,6 +46,8 @@ export class WorldView {
     this.ringSprites = [];
     this.ringsGotSet.clear();
     this.boostFx = [];
+    this.pendulumSprites = [];
+    this.pendulumChains = [];
 
     // 坑底暗色
     const backdrop = new Graphics();
@@ -215,6 +220,28 @@ export class WorldView {
       this.root.addChild(root);
     }
 
+    // 横扫钉球：铁链吊球（球体+尖刺，随 simTick 摆动；链条独立绘制）
+    for (const pd of track.pendulums) {
+      const g = new Container();
+      const body = new Graphics();
+      body.circle(0, 0, pd.r).fill({ color: 0xb3403a }).stroke({ width: 3, color: 0x5c1d1a });
+      // 尖刺环
+      for (let k = 0; k < 8; k++) {
+        const a = (Math.PI * 2 * k) / 8;
+        body.moveTo(Math.cos(a) * (pd.r - 2), Math.sin(a) * (pd.r - 2))
+          .lineTo(Math.cos(a) * (pd.r + 8), Math.sin(a) * (pd.r + 8))
+          .stroke({ width: 3.5, color: 0xd8d8e2 });
+      }
+      body.circle(0, 0, pd.r * 0.5).fill({ color: 0xffd23f, alpha: 0.85 });
+      g.addChild(body);
+      g.position.set(pd.x0, pd.highY);
+      this.pendulumSprites.push(g);
+      this.root.addChild(g);
+      const chain = new Graphics();
+      this.pendulumChains.push(chain);
+      this.root.addChild(chain);
+    }
+
     // 二段跳环：金色悬浮圆环 + 光晕（拾取后隐藏）
     for (const rg of track.rings) {
       const g = new Container();
@@ -293,7 +320,7 @@ export class WorldView {
     }
   }
 
-  /** 同步模拟 tick：升降台按三角波就位（每帧调用） */
+  /** 同步模拟 tick：升降台按三角波就位；钉球摆链按 tick 纯函数定位（每帧调用） */
   setTick(tick: number): void {
     this.simTick = tick;
     const t = this.track;
@@ -302,6 +329,21 @@ export class WorldView {
       const p = t.plats[i]!;
       const sp = this.moverSprites[i];
       if (p.mover && sp) sp.y = p.y + moverOffsetY(p.mover, tick);
+    }
+    for (let i = 0; i < t.pendulums.length; i++) {
+      const pd = t.pendulums[i]!;
+      const g = this.pendulumSprites[i];
+      if (!g) continue;
+      const bob = pendulumBob(pd, tick);
+      g.position.set(bob.x, bob.y);
+      const chain = this.pendulumChains[i]!;
+      if (chain) {
+        chain.clear();
+        // 链条：从摆轴（球横扫最高点上方固定锚点）连到球心
+        const ax = (pd.x0 + pd.x1) / 2;
+        const ay = pd.highY - (pd.highY - pd.lowY) - 60;
+        chain.moveTo(bob.x, bob.y).lineTo(ax, ay).stroke({ width: 2.5, color: 0x6d7a92, alpha: 0.85 });
+      }
     }
   }
 

@@ -16,14 +16,14 @@ import {
   STEP_S,
   TICK_RATE,
 } from '@dashline/shared';
-import { GROUND_Y, PIT_Y, buildTrack, type Plat, type Track } from './chunks.js';
+import { GROUND_Y, PIT_Y, buildTrack, type Plat, type Track, type WindZone } from './chunks.js';
 
 export { GROUND_Y, PIT_Y } from './chunks.js';
 export type { Track, GroundSeg, Hazard, Coin, Plat, Pad } from './chunks.js';
-export { PLAYER_R, CRUMBLE_TICKS, bounceV } from './tuning.js';
-export { TUNING, tapJumpHeight, holdJumpHeight } from './tuning.js';
+export { PLAYER_R, CRUMBLE_TICKS, bounceV, PENDULUM_R } from './tuning.js';
+export { TUNING, tapJumpHeight, holdJumpHeight, pendulumBob } from './tuning.js';
 
-import { PLAYER_R, TUNING, CRUMBLE_TICKS, bounceV, BOOST_FACTOR, BOOST_TICKS, djumpV, moverOffsetY } from './tuning.js';
+import { PLAYER_R, TUNING, CRUMBLE_TICKS, bounceV, BOOST_FACTOR, BOOST_TICKS, djumpV, moverOffsetY, UPDRAFT_G_FACTOR, PENDULUM_R, pendulumBob } from './tuning.js';
 
 export const START_X = 80;
 export const START_Y = GROUND_Y - PLAYER_R;
@@ -32,7 +32,7 @@ export type SimEvent =
   | { type: 'jump' }
   | { type: 'land' }
   | { type: 'coin'; index: number }
-  | { type: 'crash'; cause: 'spike' | 'pit' }
+  | { type: 'crash'; cause: 'spike' | 'pit' | 'ball' }
   | { type: 'bounce' }
   | { type: 'crumble'; index: number }
   | { type: 'ring'; index: number }
@@ -104,6 +104,9 @@ export class World {
   private platHp: number[] = [];
   private _airJumps = 0;
   private _boostLeft = 0;
+  /** 动态收集态全部收敛到 world 内部账本（track 对象保持只读共享，杜绝 clone 污染） */
+  private _coinsGotIdx = new Set<number>();
+  private _ringsGotIdx = new Set<number>();
   private evq: SimEvent[] = [];
 
   constructor(seed: bigint, track?: Track) {
@@ -118,10 +121,9 @@ export class World {
     for (let i = 0; i < this.platHp.length; i++) {
       if (this.platHp[i] === 0) broken.push(i);
     }
-    const ringsGot: number[] = [];
-    for (let i = 0; i < this.track.rings.length; i++) {
-      if (this.track.rings[i]!.got) ringsGot.push(i);
-    }
+    const ringsGotArr: number[] = [];
+    for (const i of this._ringsGotIdx) ringsGotArr.push(i);
+    ringsGotArr.sort((a, b) => a - b);
     return {
       tick: this.tick,
       x: this._x,
@@ -135,7 +137,7 @@ export class World {
       distanceM: Math.floor(this._x / 25),
       coinCount: this._coinsGot,
       crumblesBroken: broken,
-      ringsGot,
+      ringsGot: ringsGotArr,
       boost: this._boostLeft > 0 ? this._boostLeft / BOOST_TICKS : 0,
       airJumps: this._airJumps,
       charge: !this._grounded && this.holding ? Math.min(1, this.holdTicks / HOLD_MAX_TICKS) : 0,
@@ -171,6 +173,8 @@ export class World {
     c.platHp = this.platHp.slice();
     c._airJumps = this._airJumps;
     c._boostLeft = this._boostLeft;
+    c._coinsGotIdx = new Set(this._coinsGotIdx);
+    c._ringsGotIdx = new Set(this._ringsGotIdx);
     c.evq = [];
     return c;
   }
@@ -237,7 +241,15 @@ export class World {
       }
     }
     if (!this._grounded) {
-      let g = TUNING.grav;
+      // 气流柱：处于柱体区间（中心在柱顶以下）时减重；飞出柱顶恢复常重力
+      let windF = 1;
+      for (const wz of this.track.winds) {
+        if (x + half <= wz.x || x - half >= wz.x + wz.w) continue;
+        if (this._y >= GROUND_Y - wz.h) {
+          windF = Math.min(windF, wz.factor);
+        }
+      }
+      let g = TUNING.grav * (windF < 1 ? windF : 1);
       if (this.holding) {
         if ((input & IN_JUMP_HELD) !== 0 && this.holdTicks < HOLD_MAX_TICKS) {
           g *= TUNING.holdGravFactor;
@@ -294,13 +306,13 @@ export class World {
     // ---- 金币 ----
     const coins = this.track.coins;
     for (let i = 0; i < coins.length; i++) {
+      if (this._coinsGotIdx.has(i)) continue;
       const c = coins[i]!;
-      if (c.got) continue;
       if (
         Math.abs(c.x - this._x) < PLAYER_R + 11 &&
         Math.abs(c.y - this._y) < PLAYER_R + 11
       ) {
-        c.got = true;
+        this._coinsGotIdx.add(i);
         this._coinsGot++;
         this.evq.push({ type: 'coin', index: i });
       }
@@ -309,13 +321,13 @@ export class World {
     // ---- 二段跳环 ----
     const rings = this.track.rings;
     for (let i = 0; i < rings.length; i++) {
+      if (this._ringsGotIdx.has(i)) continue;
       const rg = rings[i]!;
-      if (rg.got) continue;
       if (
         Math.abs(rg.x - this._x) < PLAYER_R + 16 &&
         Math.abs(rg.y - this._y) < PLAYER_R + 16
       ) {
-        rg.got = true;
+        this._ringsGotIdx.add(i);
         this._airJumps = Math.min(2, this._airJumps + 1);
         this.evq.push({ type: 'ring', index: i });
       }
@@ -328,6 +340,19 @@ export class World {
         circleHitsRect(this._x, this._y, PLAYER_R * 0.8, hz.x, hz.y, hz.w, hz.h)
       ) {
         this.die('spike');
+        return;
+      }
+    }
+
+    // ---- 横扫钉球（圆 vs 圆；摆位是 tick 的纯函数）----
+    for (const pd of this.track.pendulums) {
+      const bob = pendulumBob(pd, this.tick);
+      if (Math.abs(bob.x - this._x) > pd.r + PLAYER_R + 8) continue;
+      const dx = bob.x - this._x;
+      const dy = bob.y - this._y;
+      const rr = pd.r + PLAYER_R * 0.8;
+      if (dx * dx + dy * dy < rr * rr) {
+        this.die('ball');
         return;
       }
     }
@@ -348,7 +373,7 @@ export class World {
     this._score = Math.floor(this._x / 25) * 100 + this._coinsGot * 50;
   }
 
-  private die(cause: 'spike' | 'pit'): void {
+  private die(cause: 'spike' | 'pit' | 'ball'): void {
     this._alive = false;
     this.evq.push({ type: 'crash', cause });
   }

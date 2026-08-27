@@ -128,6 +128,41 @@ export function holdArcHeightAt(dx: number): number | null {
   return null;
 }
 
+// ---------- 新积木（第三批）：上升气流柱 / 横扫钉球 ----------
+/** 气流柱内重力系数（<1 减重漂浮；飞出柱顶恢复正常重力） */
+export const UPDRAFT_G_FACTOR = 0.34;
+/** 钉球碰撞半径 */
+export const PENDULUM_R = 17;
+/** 钉球摆位：tick 的纯函数（三角波，不用三角函数保证跨引擎逐位一致）。
+ *  两端下沉封路、中段抬升放行 —— 摆到中间的窗口是通行时机。 */
+export interface PendulumDef {
+  /** 扫掠左端 x（钉球中心到达的左端） */
+  x0: number;
+  /** 扫掠右端 x */
+  x1: number;
+  /** 中段高位 y（玩家可从下方通过） */
+  highY: number;
+  /** 端点低位 y（封路高度） */
+  lowY: number;
+  r: number;
+  periodTicks: number;
+  phase: number;
+}
+export function pendulumBob(
+  p: PendulumDef,
+  tick: number,
+): { x: number; y: number } {
+  const u =
+    ((((tick + p.phase) % p.periodTicks) + p.periodTicks) % p.periodTicks) /
+    p.periodTicks;
+  const tri = 2 * Math.abs(2 * u - 1) - 1; // [-1,1]
+  // 对称钟摆路径：两端都下沉封路（y=lowY），经过中段时抬升放行（y=highY）
+  return {
+    x: (p.x0 + p.x1) / 2 + ((p.x1 - p.x0) / 2) * tri,
+    y: p.highY - (p.highY - p.lowY) * Math.abs(tri),
+  };
+}
+
 // ---------- 落点宽容（与 world.ts 的支撑判定一致：±0.6R）----------
 export const EDGE_FORGIVE = PLAYER_R * 0.6;
 /** 越过宽为 gap 的坑实际需要的水平位移 */
