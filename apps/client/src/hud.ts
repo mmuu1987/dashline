@@ -98,6 +98,9 @@ export class Hud {
     document.getElementById('btn-card')!.onclick = d.onCard;
     document.getElementById('btn-share')!.onclick = d.onShare;
     document.getElementById('btn-board')!.onclick = d.onBoard;
+    this.resultEl.onclick = (e) => {
+      if (e.target === this.resultEl) d.onRetry();
+    };
     this.resultEl.classList.add('show');
   }
 
@@ -107,6 +110,7 @@ export class Hud {
     onRace: (index: number) => void,
     onClose: () => void,
   ): void {
+    this.resultEl.onclick = null;
     const list = rows.length
       ? rows
           .map((r, i) => {
@@ -138,6 +142,7 @@ export class Hud {
     onAction: (id: string) => void,
     onClose: () => void,
   ): void {
+    this.resultEl.onclick = null;
     const cards = skins
       .map((s) => {
         const isEquipped = s.id === currentId;
@@ -166,6 +171,7 @@ export class Hud {
   }
 
   showAchievements(list: AchievementDef[], onClose: () => void): void {
+    this.resultEl.onclick = null;
     const items = list
       .map((a) => {
         const status = a.unlocked

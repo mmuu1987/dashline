@@ -136,31 +136,23 @@ async function boot(): Promise<void> {
   pauseBtn.addEventListener('click', togglePause);
   input.onPause(() => togglePause());
 
-  let prevModalPhase: Phase | null = null;
-  let openedFromResult = false;
-
-  function enterModal(fromResult = false): void {
-    openedFromResult = fromResult || phase === 'done';
+  function enterModal(): void {
     if (phase === 'run') {
-      prevModalPhase = phase;
       phase = 'pause';
     }
   }
 
   function exitModal(): void {
-    if (openedFromResult && phase === 'done') {
-      openedFromResult = false;
+    const s = world.snapshot;
+    if (!s.alive || s.finished || phase === 'done' || phase === 'dead') {
+      phase = 'done';
       showResultPanel();
       return;
     }
-    openedFromResult = false;
     hud.hideResult();
-    if (prevModalPhase) {
-      phase = prevModalPhase;
-      prevModalPhase = null;
-      last = performance.now();
-      acc = 0;
-    }
+    phase = 'run';
+    last = performance.now();
+    acc = 0;
   }
 
   // ---- 外观衣橱按钮 ----
@@ -337,15 +329,16 @@ async function boot(): Promise<void> {
   });
 
   input.onAction(() => {
-    if (phase === 'done' && !hud.isModalOpen()) {
+    if (phase === 'done') {
       resetAttempt();
     }
   });
 
   window.addEventListener('pointerdown', (e) => {
-    if (phase === 'done' && !hud.isModalOpen()) {
+    if (phase === 'done') {
       const target = e.target as HTMLElement | null;
       if (target && target.closest('button')) return;
+      if (target && target.closest('.board-list, .skin-grid, .ach-list')) return;
       resetAttempt();
     }
   });
@@ -447,8 +440,8 @@ async function boot(): Promise<void> {
       .catch(() => hud.toast('复制失败（浏览器限制）'));
   }
 
-  async function openBoard(fromResult = false): Promise<void> {
-    enterModal(fromResult);
+  async function openBoard(): Promise<void> {
+    enterModal();
     hud.toast('榜单加载中…');
     const [entries, offers] = await Promise.all([fetchBoard(dateStr), fetchGhosts(dateStr)]);
     if (offers) ghostOffers = offers;
@@ -499,7 +492,7 @@ async function boot(): Promise<void> {
       onRetry: () => resetAttempt(),
       onCard: () => void makeShareCard(),
       onShare: shareResult,
-      onBoard: () => void openBoard(true),
+      onBoard: () => void openBoard(),
     });
   }
 
