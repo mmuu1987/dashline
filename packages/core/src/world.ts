@@ -316,6 +316,13 @@ export class World {
           g *= TUNING.holdGravFactor;
           this.holdTicks++;
         } else {
+          // 仅当玩家提前松开按键时截断上升速度（短按微跳）；若满蓄自然结束则保持完整惯性
+          if ((input & IN_JUMP_HELD) === 0 && this.holdTicks < HOLD_MAX_TICKS) {
+            const upwardSpeed = -this._vy * this._gravDir;
+            if (upwardSpeed > TUNING.minReleaseV) {
+              this._vy = -this._gravDir * TUNING.minReleaseV;
+            }
+          }
           this.holding = false;
         }
       }

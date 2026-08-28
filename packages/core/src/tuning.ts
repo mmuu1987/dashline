@@ -22,6 +22,8 @@ export const TUNING = {
   vx: 360,
   /** 起跳初速 px/s */
   jumpV: 760,
+  /** 提前松开按键/鼠标时的截断最大初速 px/s（短按微跳/极小跳的基准） */
+  minReleaseV: 360,
   /** 重力 px/s²（越大越"重"，越小越"飘"） */
   grav: 2150,
   /** 长按上升段重力系数：<1 跳更高；1 = 无长按差异（0.34 → 满蓄 ≈ 2.05× 点按高度） */
@@ -38,7 +40,12 @@ export const bounceHeight = (bounceV * bounceV) / (2 * TUNING.grav);
 export const bounceAirTime = (2 * bounceV) / TUNING.grav;
 export const bounceRange = TUNING.vx * bounceAirTime;
 
-// ---------- 点按跳 ----------
+// ---------- 极短点按微跳（Short Hop，即按即松） ----------
+export const minHopHeight = (TUNING.minReleaseV * TUNING.minReleaseV) / (2 * TUNING.grav);
+export const minHopAirTime = (2 * TUNING.minReleaseV) / TUNING.grav;
+export const minHopRange = TUNING.vx * minHopAirTime;
+
+// ---------- 点按跳（不长按但持续 1 帧上升） ----------
 export const tapJumpHeight = (TUNING.jumpV * TUNING.jumpV) / (2 * TUNING.grav);
 export const tapAirTime = (2 * TUNING.jumpV) / TUNING.grav;
 export const tapJumpRange = TUNING.vx * tapAirTime;// ---------- 长按跳（分段积分）----------

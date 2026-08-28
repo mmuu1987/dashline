@@ -154,7 +154,7 @@ function lowBarTrack(): { track: Track; spikeX: number } {
 describe('积木：低空刺梁', () => {
   it('点按短跳可穿过（顶点擦梁而过）', () => {
     const { track, spikeX } = lowBarTrack();
-    const t0 = Math.round((spikeX - 135 - 80) / 6);
+    const t0 = Math.round((spikeX - 50 - 80) / 6);
     const inputs = blank(600);
     jumpAt(inputs, t0, 2); // 纯点按
     const r = run(track, inputs);
@@ -164,7 +164,7 @@ describe('积木：低空刺梁', () => {
 
   it('长按蓄力撞梁必死（克制无脑长按）', () => {
     const { track, spikeX } = lowBarTrack();
-    const t0 = Math.round((spikeX - 135 - 80) / 6);
+    const t0 = Math.round((spikeX - 50 - 80) / 6);
     const inputs = blank(600);
     jumpAt(inputs, t0, HOLD_MAX_TICKS); // 满蓄力
     const r = run(track, inputs);

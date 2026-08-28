@@ -9,6 +9,9 @@ import {
   tapJumpHeight,
   tapJumpRange,
   tapAirTime,
+  minHopHeight,
+  minHopRange,
+  minHopAirTime,
   effectiveGapNeed,
 } from '../src/tuning.js';
 
@@ -17,6 +20,11 @@ import {
  * 否则可能生成"理论上跳不过去"的赛道。改手感 → 跑这个文件。
  */
 describe('调参护栏（tuning guardrails）', () => {
+  it('极短点按微跳（Short Hop）高度落在敏捷低跳窗口（25~60px）', () => {
+    expect(minHopHeight).toBeGreaterThanOrEqual(25);
+    expect(minHopHeight).toBeLessThanOrEqual(60);
+    expect(holdJumpHeight / minHopHeight).toBeGreaterThanOrEqual(3.0);
+  });
   it('最高档坑也在长按跳能力圈内（≥8% 操作余量）', () => {
     const hardMax = holdJumpRange * GAP_TIERS[2]![1];
     const need = effectiveGapNeed(hardMax);

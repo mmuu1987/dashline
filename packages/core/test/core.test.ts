@@ -113,24 +113,39 @@ describe('codec 回环', () => {
 });
 
 describe('物理手感不变量', () => {
-  it('点按跳高度 < 长按跳高度', () => {
-    const tap = createWorld(7n);
-    tap.step(makeInput(true, false)); // 按下即松
-    let maxYTap = -tap.snapshot.y;
-    for (let i = 0; i < 90; i++) {
-      tap.step(0);
-      maxYTap = Math.max(maxYTap, -tap.snapshot.y);
-    }
+  it('按压时长连续把控跳跃高度：短按微跳 < 中按 < 满蓄长按（单调递增且反差显著）', () => {
+    const measurePeak = (holdTicks: number): number => {
+      const w = createWorld(7n);
+      const startY = w.snapshot.y;
+      w.step(makeInput(true, holdTicks > 0));
+      for (let i = 1; i < holdTicks; i++) {
+        w.step(makeInput(false, true));
+      }
+      let minPos = w.snapshot.y;
+      for (let i = 0; i < 90; i++) {
+        w.step(0);
+        minPos = Math.min(minPos, w.snapshot.y);
+      }
+      return startY - minPos; // 上升高度 (px)
+    };
 
-    const hold = createWorld(7n);
-    hold.step(makeInput(true, true));
-    for (let i = 0; i < 20; i++) hold.step(makeInput(false, true));
-    let maxYHold = -hold.snapshot.y;
-    for (let i = 0; i < 90; i++) {
-      hold.step(0);
-      maxYHold = Math.max(maxYHold, -hold.snapshot.y);
-    }
-    expect(maxYHold).toBeGreaterThan(maxYTap + 40);
+    const hTap = measurePeak(0); // 即点即松 (0-tick hold)
+    const hShort = measurePeak(4); // 短按 4-tick (~66ms)
+    const hMid = measurePeak(10); // 中按 10-tick (~166ms)
+    const hMax = measurePeak(20); // 满蓄 20-tick (~333ms)
+
+    // 1. 单调递增
+    expect(hTap).toBeLessThan(hShort);
+    expect(hShort).toBeLessThan(hMid);
+    expect(hMid).toBeLessThan(hMax);
+
+    // 2. 短按微跳高度低且轻巧（30~60px 敏捷低跳，刚刚好擦过 26px 小尖刺）
+    expect(hTap).toBeGreaterThanOrEqual(30);
+    expect(hTap).toBeLessThanOrEqual(60);
+
+    // 3. 满蓄跳跃高（170~200px 覆盖高层平台）
+    expect(hMax).toBeGreaterThanOrEqual(170);
+    expect(hMax / hTap).toBeGreaterThanOrEqual(3.0); // 满蓄是极短跳的 3 倍以上，手感层级极大丰富
   });
 
   it('无输入最终会死于障碍或坠坑（赛道确有挑战）', () => {

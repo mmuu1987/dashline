@@ -88,7 +88,7 @@ export class Achievements {
   }
 
   unlock(id: string): AchievementDef | null {
-    if (this.unlockedMap[id]) return null; // already unlocked
+    if (this.unlockedMap[id]) return null;
     const def = INITIAL_ACHIEVEMENTS.find((a) => a.id === id);
     if (!def) return null;
 
@@ -107,4 +107,3 @@ export class Achievements {
     return Boolean(this.unlockedMap[id]);
   }
 }
-
