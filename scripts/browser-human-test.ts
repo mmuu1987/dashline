@@ -70,12 +70,15 @@ async function runHumanTest(): Promise<void> {
     });
     const page: Page = await context.newPage();
 
-    // 监听控制台错误
+    // 监听控制台错误与未捕获异常
     page.on('console', (msg) => {
-      if (msg.type() === 'error') console.log(`[Browser Console Error] ${msg.text()}`);
+      console.log(`[Browser Console ${msg.type()}] ${msg.text()}`);
+    });
+    page.on('pageerror', (err) => {
+      console.error(`[Browser PageError]`, err);
     });
 
-    await page.goto('http://localhost:5173', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
 
     // 3. 验证 Canvas 与 HUD 初始状态
     console.log('[3/7] 验证 WebGL Canvas 与 HUD 渲染...');

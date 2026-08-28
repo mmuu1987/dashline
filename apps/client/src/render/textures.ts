@@ -22,6 +22,8 @@ export interface GameAssets {
   spike: Texture;
   flagCloth: Texture;
   confetti: Texture;
+  fluffyCloud: Texture;
+  mountains: Texture;
   /** Sunny Land（ansimuz, BSD-3 repo 编排 / 素材 free-for-commercial）↓ */
   skyTopColor: number;
   skyBottomColor: number;
@@ -194,6 +196,71 @@ function makeConfetti(): Texture {
   });
 }
 
+/** 柔美高空积云（多球渐变羽化融合） */
+function makeFluffyCloud(): Texture {
+  const W = 360;
+  const H = 140;
+  return canvasTexture(W, H, (ctx) => {
+    const blobs = [
+      { x: 80, y: 90, r: 42 },
+      { x: 135, y: 70, r: 54 },
+      { x: 195, y: 58, r: 62 },
+      { x: 255, y: 74, r: 48 },
+      { x: 295, y: 92, r: 36 },
+      { x: 180, y: 92, r: 44 },
+    ];
+    for (const b of blobs) {
+      const g = ctx.createRadialGradient(b.x, b.y - b.r * 0.15, b.r * 0.1, b.x, b.y, b.r);
+      g.addColorStop(0, 'rgba(255,255,255,0.92)');
+      g.addColorStop(0.45, 'rgba(255,255,255,0.6)');
+      g.addColorStop(0.85, 'rgba(255,255,255,0.18)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+/** 远山连绵山峦纹理（连绵起伏的山脉剪影） */
+function makeDistantMountains(): Texture {
+  const W = 1200;
+  const H = 260;
+  return canvasTexture(W, H, (ctx) => {
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.7)');
+    grad.addColorStop(0.75, 'rgba(255,255,255,0.3)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.05)');
+    ctx.fillStyle = grad;
+
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    const peaks = [
+      { x: 0, y: 140 },
+      { x: 130, y: 70 },
+      { x: 250, y: 125 },
+      { x: 410, y: 35 },
+      { x: 570, y: 120 },
+      { x: 730, y: 55 },
+      { x: 900, y: 135 },
+      { x: 1050, y: 65 },
+      { x: 1200, y: 140 },
+    ];
+    for (let i = 0; i < peaks.length - 1; i++) {
+      const p0 = peaks[i]!;
+      const p1 = peaks[i + 1]!;
+      const cx = (p0.x + p1.x) / 2;
+      ctx.quadraticCurveTo(p0.x + (p1.x - p0.x) * 0.35, p0.y, cx, (p0.y + p1.y) / 2);
+      ctx.quadraticCurveTo(p0.x + (p1.x - p0.x) * 0.65, p1.y, p1.x, p1.y);
+    }
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fill();
+  });
+}
+
 /** 资源 URL：拼上构建 base（dev='/'，Pages 子路径='./'），兼容任意部署目录 */
 const assetUrl = (p: string): string => import.meta.env.BASE_URL + p.replace(/^\//, '');
 
@@ -255,6 +322,8 @@ export async function loadAssets(): Promise<GameAssets> {
     spike: makeSpike(34, 26),
     flagCloth: makeFlagCloth(),
     confetti: makeConfetti(),
+    fluffyCloud: makeFluffyCloud(),
+    mountains: makeDistantMountains(),
     skyTopColor: skyBmp.top,
     skyBottomColor: skyBmp.bottom,
     forestLayer: loaded[9] as Texture,
