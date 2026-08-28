@@ -10,6 +10,8 @@ import {
   BUFFER_TICKS,
   COYOTE_TICKS,
   HOLD_MAX_TICKS,
+  IN_DASH_PRESS,
+  IN_DOWN_HELD,
   IN_JUMP_HELD,
   IN_JUMP_PRESS,
   STEP_S,
@@ -32,7 +34,7 @@ import {
 export { GROUND_Y, PIT_Y, CEILING_Y } from './chunks.js';
 export type { Track, GroundSeg, Hazard, Coin, Plat, Pad, GateDef, PortalDef, ShieldDef, MagnetDef } from './chunks.js';
 export { PLAYER_R, CRUMBLE_TICKS, bounceV, PENDULUM_R, isGateActive, MAGNET_DURATION_TICKS, MAGNET_RADIUS } from './tuning.js';
-export { TUNING, tapJumpHeight, holdJumpHeight, pendulumBob } from './tuning.js';
+export { TUNING, tapJumpHeight, holdJumpHeight, pendulumBob, type PerksConfig } from './tuning.js';
 
 import {
   PLAYER_R,
@@ -49,6 +51,7 @@ import {
   isGateActive,
   MAGNET_DURATION_TICKS,
   MAGNET_RADIUS,
+  type PerksConfig,
 } from './tuning.js';
 
 export const START_X = 80;
@@ -63,6 +66,8 @@ export type SimEvent =
   | { type: 'crumble'; index: number }
   | { type: 'ring'; index: number }
   | { type: 'djump' }
+  | { type: 'dash'; x: number; y: number }
+  | { type: 'slam'; x: number; y: number }
   | { type: 'boost' }
   | { type: 'portal'; dir: 1 | -1 }
   | { type: 'shield' }
@@ -101,6 +106,12 @@ export interface WorldSnapshot {
   magnetLeft: number;
   /** 当前连击数 */
   combo: number;
+  /** 是否正在空中破风冲刺 */
+  dashing: boolean;
+  /** 是否正在空中极速下砸 */
+  slamming: boolean;
+  /** 空中冲刺是否就绪可用 */
+  canAirDash: boolean;
 }
 
 const FINISH_BASE_SCORE = 10_000_000;
@@ -149,6 +160,10 @@ export class World {
   private _magnetTicks = 0;
   private _lastCoinTick = -999;
   private _coinCombo = 0;
+  private _dashTicks = 0;
+  private _canAirDash = true;
+  private _slamming = false;
+  private _perks: PerksConfig = {};
 
   /** 动态收集态收敛到内部账本（track 对象只读共享） */
   private _coinsGotIdx = new Set<number>();
@@ -158,11 +173,15 @@ export class World {
   private _nearMissHazards = new Set<number>();
   private evq: SimEvent[] = [];
 
-  constructor(seed: bigint, track?: Track) {
+  constructor(seed: bigint, track?: Track, perks?: PerksConfig) {
     this.seed = seed;
     this.track = track ?? buildTrack(seed);
     this.platHp = this.track.plats.map((p) => (p.crumble ? -2 : -1));
     this._score = 0;
+    this._perks = perks ?? {};
+    if (this._perks.startShield) {
+      this._hasShield = true;
+    }
   }
 
   get snapshot(): WorldSnapshot {
@@ -194,6 +213,9 @@ export class World {
       hasShield: this._hasShield,
       magnetLeft: this._magnetTicks > 0 ? this._magnetTicks / MAGNET_DURATION_TICKS : 0,
       combo: this._coinCombo,
+      dashing: this._dashTicks > 0,
+      slamming: this._slamming,
+      canAirDash: this._canAirDash,
     };
   }
 
@@ -230,6 +252,10 @@ export class World {
     c._magnetTicks = this._magnetTicks;
     c._lastCoinTick = this._lastCoinTick;
     c._coinCombo = this._coinCombo;
+    c._dashTicks = this._dashTicks;
+    c._canAirDash = this._canAirDash;
+    c._slamming = this._slamming;
+    c._perks = this._perks;
     c._coinsGotIdx = new Set(this._coinsGotIdx);
     c._ringsGotIdx = new Set(this._ringsGotIdx);
     c._shieldsGotIdx = new Set(this._shieldsGotIdx);
@@ -280,9 +306,32 @@ export class World {
       this._airJumps--;
       this.holding = true;
       this.holdTicks = 0;
+      this._canAirDash = true;
       this.evq.push({ type: 'djump' });
     } else if (this.buffer > 0) {
       this.buffer--;
+    }
+
+    // 空中破风冲刺（Air Dash）
+    if (
+      (input & IN_DASH_PRESS) !== 0 &&
+      !this._grounded &&
+      this._canAirDash &&
+      this._dashTicks <= 0
+    ) {
+      this._dashTicks = TUNING.dashTicks + (this._perks.dashBoost ? 4 : 0);
+      this._canAirDash = false;
+      this._vy = 0;
+      this.holding = false;
+      this._slamming = false;
+      this.evq.push({ type: 'dash', x: this._x, y: this._y });
+    }
+
+    // 空中急速下砸（Fast Fall / Ground Slam）
+    if ((input & IN_DOWN_HELD) !== 0 && !this._grounded && this._dashTicks <= 0) {
+      this._slamming = true;
+      this._vy = TUNING.slamVy * this._gravDir;
+      this.holding = false;
     }
 
     const half = PLAYER_R * 0.6;
@@ -291,6 +340,7 @@ export class World {
     if (this._grounded) {
       this._vy = 0;
       this._airJumps = 0;
+      this._canAirDash = true;
       const mv = this.moverUnder(x, half);
       if (mv !== null) {
         this._y = this.moverTop(mv, this.tick) - PLAYER_R * this._gravDir;
@@ -298,6 +348,10 @@ export class World {
         this._grounded = false;
         this.coyote = COYOTE_TICKS;
       }
+    } else if (this._dashTicks > 0) {
+      // 冲刺期间重力冻结，沿水平线突进
+      this._dashTicks--;
+      this._vy = 0;
     } else {
       // 空中重力积分
       let windF = 1;
@@ -338,13 +392,28 @@ export class World {
           this._y = top - PLAYER_R * this._gravDir;
           this._vy = 0;
           this._grounded = true;
+          this._canAirDash = true;
+          if (this._slamming) {
+            this.evq.push({
+              type: 'slam',
+              x: this._x,
+              y: this._y + PLAYER_R * this._gravDir,
+            });
+            this._slamming = false;
+          }
           this.evq.push({ type: 'land' });
         }
       }
     }
 
     // 前进
-    this._x += (this._boostLeft > 0 ? TUNING.vx * BOOST_FACTOR : TUNING.vx) * STEP_S;
+    const vx =
+      this._dashTicks > 0
+        ? TUNING.dashVx
+        : this._boostLeft > 0
+          ? TUNING.vx * BOOST_FACTOR
+          : TUNING.vx;
+    this._x += vx * STEP_S;
 
     // 弹跳菇
     if (this._grounded && this._gravDir === 1) {
@@ -353,6 +422,7 @@ export class World {
           this._vy = -bounceV;
           this._grounded = false;
           this.holding = false;
+          this._canAirDash = true;
           this.evq.push({ type: 'bounce' });
           break;
         }
@@ -382,6 +452,7 @@ export class World {
             this._vy = 0;
             this._grounded = false;
             this.holding = false;
+            this._canAirDash = true;
             this.evq.push({ type: 'portal', dir: this._gravDir });
           }
         }
@@ -420,10 +491,11 @@ export class World {
       }
     }
 
-    // ---- 金币（支持普通拾取 + 磁铁超大范围吸引）----
+    // ---- 金币（支持普通拾取 + 磁铁超大范围吸引 + 天赋暴击翻倍）----
     const coins = this.track.coins;
     const isMagnet = this._magnetTicks > 0;
-    const collectR = isMagnet ? MAGNET_RADIUS : PLAYER_R + 12;
+    const magnetMult = this._perks.magnetRadiusMult ?? 1.0;
+    const collectR = isMagnet ? MAGNET_RADIUS * magnetMult : PLAYER_R + 12;
     for (let i = 0; i < coins.length; i++) {
       if (this._coinsGotIdx.has(i)) continue;
       const c = coins[i]!;
@@ -431,7 +503,12 @@ export class World {
       const dy = c.y - this._y;
       if (dx * dx + dy * dy < collectR * collectR) {
         this._coinsGotIdx.add(i);
-        this._coinsGot++;
+        let bonus = 1;
+        if (this._perks.gemMultiplierChance && this._perks.gemMultiplierChance > 0) {
+          const r = ((this.tick * 9301 + 49297) % 233280) / 233280;
+          if (r < this._perks.gemMultiplierChance) bonus = 2;
+        }
+        this._coinsGot += bonus;
         this._coinCombo++;
         this._lastCoinTick = this.tick;
         this.evq.push({ type: 'coin', index: i, combo: this._coinCombo });
@@ -449,6 +526,7 @@ export class World {
       ) {
         this._ringsGotIdx.add(i);
         this._airJumps = Math.min(2, this._airJumps + 1);
+        this._canAirDash = true;
         this.evq.push({ type: 'ring', index: i });
       }
     }
@@ -618,10 +696,10 @@ export class World {
   }
 }
 
-export function createWorld(seed: bigint): World {
-  return new World(seed);
+export function createWorld(seed: bigint, perks?: PerksConfig): World {
+  return new World(seed, undefined, perks);
 }
 
-export function createWorldWithTrack(seed: bigint, track: Track): World {
-  return new World(seed, track);
+export function createWorldWithTrack(seed: bigint, track: Track, perks?: PerksConfig): World {
+  return new World(seed, track, perks);
 }

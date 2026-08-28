@@ -350,11 +350,19 @@ export class BallActor {
     this.squash *= 0.86;
     let sy = 1 - 0.24 * this.squash;
     let sx = 1 + 0.18 * this.squash;
-    if (!snap.grounded && snap.vy < -250) {
+    if (snap.dashing) {
+      // 破风冲刺：水平流线拉伸
+      sx = 1.35;
+      sy = 0.72;
+    } else if (snap.slamming) {
+      // 极速下砸：垂直锋利拉伸
+      sy = 1.38;
+      sx = 0.72;
+    } else if (!snap.grounded && snap.vy < -250) {
       sy = Math.max(sy, 1.14);
       sx = Math.min(sx, 0.9);
     }
-    if (this.chargeV > 0.04) {
+    if (this.chargeV > 0.04 && !snap.dashing && !snap.slamming) {
       sy *= 1 + this.chargeV * 0.15;
       sx *= 1 - this.chargeV * 0.08;
     }
@@ -409,6 +417,9 @@ export class BallActor {
       hasShield: false,
       magnetLeft: 0,
       combo: 0,
+      dashing: false,
+      slamming: false,
+      canAirDash: true,
     } satisfies WorldSnapshot);
   }
 

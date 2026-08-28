@@ -169,6 +169,26 @@ export class Sfx {
   djump(): void {
     this.beep(330, 0.14, 'triangle', 0.06, 660);
   }
+  /** 空中破风冲刺：清脆疾速呼啸破空声 */
+  dash(): void {
+    this.beep(600, 0.14, 'sawtooth', 0.05, 1400);
+    setTimeout(() => this.beep(900, 0.1, 'sine', 0.04, 300), 40);
+  }
+  /** 空中极速下砸触地：强劲沉稳重击震荡波 */
+  slam(): void {
+    this.beep(160, 0.22, 'triangle', 0.09, 40);
+    const ctx = this.ctx;
+    if (ctx && this.master && this.noiseBuf && ctx.state === 'running') {
+      const t = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.14, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      src.connect(g).connect(this.master);
+      src.start(t);
+    }
+  }
   /** 加速带触发：引擎式上升轰鸣 */
   boost(): void {
     this.beep(200, 0.28, 'sawtooth', 0.045, 900);

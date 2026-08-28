@@ -13,6 +13,7 @@ export interface ResultData {
   onCard: () => void;
   onShare: () => void;
   onBoard: () => void;
+  onTalents?: () => void;
 }
 
 export interface BoardRow {
@@ -90,13 +91,15 @@ export class Hud {
       ${ghost}
       <div class="btns">
         <button id="btn-retry">再跑一次</button>
-        <button id="btn-card" class="ghost-btn">📸 战报图</button>
-        <button id="btn-share" class="ghost-btn">复制战绩</button>
+        <button id="btn-talents-res" class="race-btn">⚡ 天赋强化</button>
+        <button id="btn-card" class="ghost-btn">📸 战报</button>
         <button id="btn-board" class="ghost-btn">榜单</button>
       </div>`;
     document.getElementById('btn-retry')!.onclick = d.onRetry;
+    if (d.onTalents && document.getElementById('btn-talents-res')) {
+      document.getElementById('btn-talents-res')!.onclick = d.onTalents;
+    }
     document.getElementById('btn-card')!.onclick = d.onCard;
-    document.getElementById('btn-share')!.onclick = d.onShare;
     document.getElementById('btn-board')!.onclick = d.onBoard;
     this.resultEl.onclick = (e) => {
       if (e.target === this.resultEl) d.onRetry();
@@ -195,6 +198,53 @@ export class Hud {
       <div class="btns"><button id="btn-aclose">关闭</button></div>`;
 
     document.getElementById('btn-aclose')!.onclick = onClose;
+    this.resultEl.classList.add('show');
+  }
+
+  showTalents(
+    talents: import('./talents.js').TalentDef[],
+    totalCoins: number,
+    onUpgrade: (id: string) => void,
+    onClose: () => void,
+  ): void {
+    this.resultEl.onclick = null;
+    const cards = talents
+      .map((t) => {
+        const isMax = t.level >= t.maxLevel;
+        const curCost = isMax ? null : t.costs[t.level];
+        const canAfford = curCost !== null && totalCoins >= curCost;
+        const btnText = isMax ? '已满级' : `🪙 ${curCost} 升级`;
+        const btnClass = isMax ? 'ghost-btn' : canAfford ? 'race-btn' : 'ghost-btn';
+        const levelStars = '★'.repeat(t.level) + '☆'.repeat(t.maxLevel - t.level);
+        const curEffect = t.level > 0 ? t.effects[t.level - 1] : '未激活';
+        const nextEffect = !isMax ? `<div style="color:#38bdf8;font-size:11px;margin-top:2px;">下级: ${t.effects[t.level]}</div>` : '';
+
+        return `
+          <div class="skin-card">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:22px;">${t.icon}</span>
+              <div>
+                <div class="s-name" style="margin:0;">${t.name} <span style="color:#f59e0b;font-size:12px;margin-left:4px;">${levelStars}</span></div>
+                <div style="color:#94a3b8;font-size:11px;">当前: ${curEffect}</div>
+              </div>
+            </div>
+            <div class="s-desc" style="margin-top:4px;">${t.desc}</div>
+            ${nextEffect}
+            <button class="s-btn ${btnClass}" data-id="${t.id}" style="margin-top:8px;" ${isMax || !canAfford ? 'disabled' : ''}>${btnText}</button>
+          </div>`;
+      })
+      .join('');
+
+    this.panel.innerHTML = `
+      <h2>⚡ 单机天赋强化</h2>
+      <div class="row" style="color: #ffd23f;">当前资产：🪙 <b>${totalCoins}</b> 宝石</div>
+      <div class="skin-grid">${cards}</div>
+      <div class="btns"><button id="btn-tclose">关闭</button></div>`;
+
+    for (const b of Array.from(this.panel.querySelectorAll<HTMLButtonElement>('.s-btn:not([disabled])'))) {
+      b.onclick = () => onUpgrade(b.dataset.id!);
+    }
+    document.getElementById('btn-tclose')!.onclick = onClose;
     this.resultEl.classList.add('show');
   }
 

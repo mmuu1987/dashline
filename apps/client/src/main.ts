@@ -43,8 +43,19 @@ import { loadAssets } from './render/textures.js';
 import { exportShareCard, renderShareCard } from './share-card.js';
 import { Wardrobe } from './wardrobe.js';
 import { Achievements } from './achievements.js';
+import { Talents } from './talents.js';
 
 const STEP_S = 1 / 60;
+
+const vibrate = (p: number | number[]): void => {
+  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    try {
+      navigator.vibrate(p);
+    } catch {
+      // ignore
+    }
+  }
+};
 
 interface BestRecord {
   score: number;
@@ -86,6 +97,7 @@ async function boot(): Promise<void> {
   const sfx = new Sfx();
   const wardrobe = new Wardrobe();
   const achievements = new Achievements();
+  const talents = new Talents();
   const assets = await loadAssets();
 
   // ---- 每日种子与主题 ----
@@ -184,11 +196,35 @@ async function boot(): Promise<void> {
   }
   achBtn.addEventListener('click', openAchievements);
 
+  // ---- 单机天赋强化按钮 ----
+  const talentsBtn = document.getElementById('btn-talents')!;
+  function openTalents(): void {
+    enterModal();
+    hud.showTalents(
+      talents.getAll(),
+      wardrobe.getTotalCoins(),
+      (id) => {
+        const res = talents.upgrade(id, wardrobe.getTotalCoins());
+        if (res.ok) {
+          wardrobe.deductCoins(res.cost);
+          sfx.shield();
+          vibrate([30, 20, 30]);
+          hud.toast('⚡ 天赋升级成功！');
+          openTalents();
+        } else {
+          hud.toast('宝石不足，多去跑道收集吧！');
+        }
+      },
+      exitModal,
+    );
+  }
+  talentsBtn.addEventListener('click', openTalents);
+
   // ---- 状态 ----
   let phase: Phase = 'run';
   let attempts = 0;
   let deadUntil = 0;
-  let world: World = createWorld(seed);
+  let world: World = createWorld(seed, talents.getPerksConfig());
   let recorder: number[] = [];
   let best: BestRecord | null = null;
   let usedShieldInRun = false;
@@ -308,7 +344,7 @@ async function boot(): Promise<void> {
   }
 
   function resetAttempt(): void {
-    world = createWorld(seed);
+    world = createWorld(seed, talents.getPerksConfig());
     view.setTrack(world.track);
     view.resetCamera();
     view.resetAttemptFx(START_X, START_Y);
@@ -493,6 +529,7 @@ async function boot(): Promise<void> {
       onCard: () => void makeShareCard(),
       onShare: shareResult,
       onBoard: () => void openBoard(),
+      onTalents: () => openTalents(),
     });
   }
 
@@ -532,9 +569,22 @@ async function boot(): Promise<void> {
           view.fx.dust(s.x, s.y + PLAYER_R * s.gravDir);
           break;
         }
+        case 'dash': {
+          sfx.dash();
+          view.onDash(ev.x, ev.y);
+          vibrate(25);
+          break;
+        }
+        case 'slam': {
+          sfx.slam();
+          view.onSlam(ev.x, ev.y);
+          vibrate([35, 20, 35]);
+          break;
+        }
         case 'coin': {
           sfx.coin(ev.combo);
           hud.showCombo(ev.combo);
+          vibrate(10);
           const pt = view.getCoinPoint(ev.index);
           if (pt) view.fx.coin(pt.x, pt.y);
           view.onCoin(ev.index);
@@ -587,6 +637,7 @@ async function boot(): Promise<void> {
         }
         case 'shieldBreak': {
           sfx.shieldBreak();
+          vibrate(45);
           const s = world.snapshot;
           view.onShieldBreak(s.x, s.y);
           usedShieldInRun = true;
@@ -601,6 +652,7 @@ async function boot(): Promise<void> {
         }
         case 'nearmiss': {
           sfx.nearmiss();
+          vibrate(15);
           view.onNearMiss(ev.x, ev.y);
           nearMissCountInRun++;
           if (nearMissCountInRun >= 2) {
@@ -615,6 +667,7 @@ async function boot(): Promise<void> {
           view.addShake(11);
           hud.flash();
           sfx.crash();
+          vibrate([60, 40, 80]);
           const s = world.snapshot;
           view.fx.crash(s.x, s.y);
           commitAttempt();

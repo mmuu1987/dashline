@@ -107,3 +107,4 @@ export class Achievements {
     return Boolean(this.unlockedMap[id]);
   }
 }
+

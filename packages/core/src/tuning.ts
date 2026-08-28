@@ -23,14 +23,32 @@ export const TUNING = {
   /** 起跳初速 px/s */
   jumpV: 760,
   /** 提前松开按键/鼠标时的截断最大初速 px/s（短按微跳/极小跳的基准） */
-  minReleaseV: 360,
+  minReleaseV: 440,
   /** 重力 px/s²（越大越"重"，越小越"飘"） */
   grav: 2150,
   /** 长按上升段重力系数：<1 跳更高；1 = 无长按差异（0.34 → 满蓄 ≈ 2.05× 点按高度） */
   holdGravFactor: 0.34,
   /** 弹跳菇弹射初速系数（相对 jumpV） */
   bounceFactor: 1.32,
+  /** 空中冲刺持续帧数 */
+  dashTicks: 8,
+  /** 空中冲刺前进速度 px/s */
+  dashVx: 680,
+  /** 空中急速下砸初速度 px/s */
+  slamVy: 1250,
 } as const;
+
+/** 离线天赋强化加成接口 */
+export interface PerksConfig {
+  /** 开局自带护盾 */
+  startShield?: boolean;
+  /** 磁铁范围加成系数（默认 1.0） */
+  magnetRadiusMult?: number;
+  /** 宝石暴击翻倍几率（0.0 ~ 1.0） */
+  gemMultiplierChance?: number;
+  /** 冲刺距离增强 */
+  dashBoost?: boolean;
+}
 
 /** 碎裂板被踩后的存活 tick 数（~0.43s：正常节奏擦着碎裂通过，停留即塌） */
 export const CRUMBLE_TICKS = 26;

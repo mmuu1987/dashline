@@ -166,7 +166,7 @@
       }
       #pause-badge.show { display: flex; }
       /* ---- 底部功能按钮 ---- */
-      #btn-fs, #btn-mute, #btn-pause, #btn-wardrobe, #btn-achievements {
+      #btn-fs, #btn-mute, #btn-pause, #btn-wardrobe, #btn-achievements, #btn-talents {
         display: flex; position: absolute;
         width: 38px; height: 38px;
         align-items: center; justify-content: center;
@@ -182,6 +182,7 @@
       #btn-pause { left: calc(56px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
       #btn-wardrobe { left: calc(100px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
       #btn-achievements { left: calc(144px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
+      #btn-talents { left: calc(188px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
     </style>
   </head>
   <body>
@@ -191,7 +192,7 @@
         <div id="flash"></div>
         <div class="hud-box" id="hud-stats"></div>
         <div class="hud-box" id="hud-meta"></div>
-        <div class="hud-box" id="hud-hint">点按小跳 · 按住蓄力跳更高更远 · P 暂停 · R 重开</div>
+        <div class="hud-box" id="hud-hint">轻点小跳 · 长按大跳 · S/下滑下砸 · D/右滑/双击冲刺 · P 暂停</div>
         <div class="hud-box" id="hud-mode">…</div>
         <div id="combo-tag">Combo x2!</div>
         <div id="pause-badge">⏸ 画面已定格 · 按 P / 空格继续</div>
@@ -202,6 +203,7 @@
         <button id="btn-pause" aria-label="暂停/继续">⏸</button>
         <button id="btn-wardrobe" aria-label="外观衣橱">👗</button>
         <button id="btn-achievements" aria-label="成就荣誉">🏆</button>
+        <button id="btn-talents" aria-label="天赋强化">⚡</button>
       </div>
       <div id="rotate-overlay">
         <div class="phone">📱</div>

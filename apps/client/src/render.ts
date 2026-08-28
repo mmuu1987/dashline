@@ -91,6 +91,16 @@ export class GameView {
     this.addShake(3.5);
   }
 
+  onDash(x: number, y: number): void {
+    this.fx.dashBurst(x, y);
+    this.addShake(4);
+  }
+
+  onSlam(x: number, y: number): void {
+    this.fx.slamImpact(x, y);
+    this.addShake(9);
+  }
+
   getCoinPoint(i: number): { x: number; y: number } | null {
     return this.worldView.getCoinPoint(i);
   }

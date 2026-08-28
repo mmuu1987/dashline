@@ -161,7 +161,7 @@ async function runHumanTest(): Promise<void> {
     await page.waitForTimeout(300);
 
     // 7. 交互测试：查看荣誉成就弹窗
-    console.log('[7/9] 模拟真人点击 [荣誉成就] 按钮...');
+    console.log('[7/10] 模拟真人点击 [荣誉成就] 按钮...');
     const achBtn = page.locator('#btn-achievements');
     await achBtn.click();
     await page.waitForTimeout(400);
@@ -172,8 +172,20 @@ async function runHumanTest(): Promise<void> {
     await page.click('#btn-aclose', { force: true });
     await page.waitForTimeout(300);
 
-    // 8. 交互测试：纯净定格暂停
-    console.log('[8/9] 模拟真人点击暂停按钮与按 P 键暂停...');
+    // 8. 交互测试：查看单机离线天赋强化弹窗
+    console.log('[8/10] 模拟真人点击 [天赋强化] 按钮...');
+    const talentsBtn = page.locator('#btn-talents');
+    await talentsBtn.click();
+    await page.waitForTimeout(400);
+
+    const talentPicPath = path.join(SCREENSHOT_DIR, 'human_test_07_talents.png');
+    await page.screenshot({ path: talentPicPath });
+    console.log(`✓ 天赋面板截图已保存: ${talentPicPath}`);
+    await page.click('#btn-tclose', { force: true });
+    await page.waitForTimeout(300);
+
+    // 9. 交互测试：纯净定格暂停
+    console.log('[9/10] 模拟真人点击暂停按钮与按 P 键暂停...');
     const pauseBtn = page.locator('#btn-pause');
     await pauseBtn.click();
     await page.waitForTimeout(300);

@@ -148,6 +148,60 @@ describe('物理手感不变量', () => {
     expect(hMax / hTap).toBeGreaterThanOrEqual(3.0); // 满蓄是极短跳的 3 倍以上，手感层级极大丰富
   });
 
+  it('空中破风冲刺（Air Dash）：触发 dash 事件、重力冻结并向前疾速突进', () => {
+    const w = createWorld(7n);
+    // 起跳
+    w.step(makeInput(true, true));
+    w.step(makeInput(false, true));
+    expect(w.snapshot.grounded).toBe(false);
+    expect(w.snapshot.canAirDash).toBe(true);
+
+    const yBeforeDash = w.snapshot.y;
+    const xBeforeDash = w.snapshot.x;
+
+    // 触发冲刺
+    w.step(makeInput(false, false, false, true));
+    const events = w.takeEvents();
+    expect(events.some((e) => e.type === 'dash')).toBe(true);
+    expect(w.snapshot.dashing).toBe(true);
+    expect(w.snapshot.canAirDash).toBe(false);
+
+    // 冲刺期间 y 不下坠
+    w.step(0);
+    expect(Math.abs(w.snapshot.y - yBeforeDash)).toBeLessThan(2);
+    expect(w.snapshot.x - xBeforeDash).toBeGreaterThan(15);
+  });
+
+  it('空中极速下砸（Fast Fall / Ground Slam）：触地爆发 slam 震荡波事件', () => {
+    const w = createWorld(7n);
+    w.step(makeInput(true, true));
+    w.step(makeInput(false, true));
+    expect(w.snapshot.grounded).toBe(false);
+
+    // 触发下砸
+    w.step(makeInput(false, false, true, false));
+    expect(w.snapshot.slamming).toBe(true);
+    expect(w.snapshot.vy).toBeGreaterThan(1000);
+
+    // 模拟直到落地
+    let gotSlam = false;
+    for (let i = 0; i < 30; i++) {
+      w.step(0);
+      if (w.takeEvents().some((e) => e.type === 'slam')) {
+        gotSlam = true;
+        break;
+      }
+    }
+    expect(gotSlam).toBe(true);
+    expect(w.snapshot.grounded).toBe(true);
+    expect(w.snapshot.canAirDash).toBe(true); // 落地重置冲刺
+  });
+
+  it('离线天赋加成（PerksConfig）：开局护盾与属性强化正确生效', () => {
+    const w = createWorld(7n, { startShield: true });
+    expect(w.snapshot.hasShield).toBe(true);
+  });
+
   it('无输入最终会死于障碍或坠坑（赛道确有挑战）', () => {
     const { snap } = runWorld(SEED, new Uint8Array(7200));
     expect(snap.alive && snap.finished).toBe(false);

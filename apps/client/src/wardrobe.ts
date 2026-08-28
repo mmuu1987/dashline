@@ -117,6 +117,15 @@ export class Wardrobe {
     return this.totalCoins;
   }
 
+  /** 扣除金币（用于天赋升级或商城购买） */
+  deductCoins(amount: number): boolean {
+    if (amount <= 0) return true;
+    if (this.totalCoins < amount) return false;
+    this.totalCoins -= amount;
+    this.save();
+    return true;
+  }
+
   getTotalCoins(): number {
     return this.totalCoins;
   }

@@ -157,6 +157,35 @@ export class Particles {
       { g: 120, life: 0.35, scale: 0.05, alpha: 0.4, shrink: true });
   }
 
+  /** 空中破风冲刺音爆气浪与疾速光锥 */
+  dashBurst(x: number, y: number): void {
+    // 尾部向后喷射的白蓝疾速风矢
+    for (let i = 0; i < 12; i++) {
+      const vx = -(180 + Math.random() * 260);
+      const vy = (Math.random() - 0.5) * 80;
+      this.spawn(i % 2 === 0 ? 'sparkle' : 'whiteDot', 0x38bdf8, x - 10, y + (Math.random() - 0.5) * 14,
+        vx, vy, { life: 0.35 + Math.random() * 0.15, scale: 0.18 + Math.random() * 0.12, alpha: 0.85, add: true, shrink: true });
+    }
+  }
+
+  /** 空中急速下砸触地：强劲冲击波光环与土石飞溅 */
+  slamImpact(x: number, y: number): void {
+    // 左右爆发的强力地面震波
+    for (let i = 0; i < 16; i++) {
+      const dir = i % 2 === 0 ? 1 : -1;
+      const sp = 120 + Math.random() * 180;
+      const vy = -(30 + Math.random() * 80);
+      this.spawn('whiteDot', 0xffedd5, x, y - 4,
+        dir * sp, vy, { g: 300, life: 0.45 + Math.random() * 0.2, scale: 0.12 + Math.random() * 0.1, alpha: 0.8, shrink: true });
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI * i) / 8;
+      this.spawn('sparkle', 0xfbbf24, x, y - 6,
+        Math.cos(a) * 140, -Math.sin(a) * 120,
+        { g: 200, life: 0.4, scale: 0.22, alpha: 0.9, add: true, shrink: true });
+    }
+  }
+
   /** 冲刺拖尾残影 */
   trail(x: number, y: number): void {
     this.spawn('whiteDot', 0x59d3ff, x, y, 0, 0,

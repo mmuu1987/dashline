@@ -4,15 +4,17 @@ export const STEP_MS = 1000 / TICK_RATE;
 export const STEP_S = 1 / TICK_RATE;
 
 /** core 物理法则版本：任何逻辑改动必须 bump，榜单按版本分桶 */
-export const CORE_VERSION = 'core.8';
+export const CORE_VERSION = 'core.9';
 export const PROTOCOL_VERSION = 1;
 
 /** 输入位掩码（每 tick 1 字节） */
-export const IN_JUMP_PRESS = 1 << 0; // 边沿：本 tick 按下
-export const IN_JUMP_HELD = 1 << 1; // 电平：持续按住
-export const IN_DOWN_HELD = 1 << 2; // 预留：下滑
+export const IN_JUMP_PRESS = 1 << 0; // 边沿：本 tick 跳跃按下
+export const IN_JUMP_HELD = 1 << 1; // 电平：持续按住跳跃
+export const IN_DOWN_HELD = 1 << 2; // 电平：空中急速下砸 / Fast Fall
+export const IN_DASH_PRESS = 1 << 3; // 边沿：空中破风冲刺 / Air Dash
 
 /** 手感参数（与 game-design.md §2 对应） */
 export const COYOTE_TICKS = 7; // 土狼时间 ~117ms
 export const BUFFER_TICKS = 8; // 预输入缓冲 ~133ms
 export const HOLD_MAX_TICKS = 20; // 长按蓄力上限 ~333ms（满蓄高度 ≈ 2.05× 点按）
+export const DASH_DURATION_TICKS = 8; // 冲刺持续 ~133ms
