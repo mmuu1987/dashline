@@ -33,9 +33,9 @@ export class GameView {
   private trailT = 0;
   private runDustT = 0;
 
-  constructor(assets: GameAssets) {
+  constructor(assets: GameAssets, themeId = 0) {
     this.worldView = new WorldView(assets);
-    this.bg = new Background(assets);
+    this.bg = new Background(assets, themeId);
     this.player = new BallActor(assets, false, (x, y) => this.worldView.surfaceYBelow(x, y));
     this.ghost = new BallActor(assets, true);
     this.fx = new Particles(assets);
@@ -50,6 +50,10 @@ export class GameView {
     );
     this.shakeWrap.addChild(this.bg.root, this.camera);
     this.root.addChild(this.shakeWrap, this.vignette);
+  }
+
+  setTheme(themeId: number): void {
+    this.bg.applyTheme(themeId);
   }
 
   setTrack(track: Track): void {

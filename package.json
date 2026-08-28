@@ -9,12 +9,15 @@
     "dev:api": "pnpm --filter @dashline/api dev",
     "build": "pnpm --filter @dashline/client build",
     "preview": "pnpm --filter @dashline/client preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "tsx scripts/browser-human-test.ts",
+    "test:seeds": "pnpm --filter @dashline/api exec tsx scripts/test-multi-seeds.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "typescript": "^5.5.4",
+    "playwright": "^1.62.1",
     "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
     "vitest": "^2.0.5"
   }
 }

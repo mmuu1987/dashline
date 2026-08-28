@@ -53,6 +53,7 @@ class TB {
       rings: [],
       winds: [],
       pendulums: [],
+      gates: [],
       finishX,
       length: this.cursor,
     };

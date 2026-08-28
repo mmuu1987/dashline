@@ -1,6 +1,5 @@
-/** 赛道静态化：地面双层平铺 / 平台 / 尖刺 / 宝石 / 旗帜 / 装饰散布 —— 每次进赛道构建一次。 */
 import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js';
-import { GROUND_Y, SPIKE_W, moverOffsetY, pendulumBob, type Track } from '@dashline/core';
+import { GROUND_Y, SPIKE_W, isGateActive, moverOffsetY, pendulumBob, type Track } from '@dashline/core';
 import { splitmix32 } from '@dashline/shared';
 import { VIEW_H } from './consts.js';
 import type { GameAssets } from './textures.js';
@@ -32,6 +31,11 @@ export class WorldView {
   /** 横扫钉球：球容器 + 链条（随 simTick 摆动） */
   private pendulumSprites: (Container | null)[] = [];
   private pendulumChains: (Graphics | null)[] = [];
+  /** 激光闸门 */
+  private gateBeams: Graphics[] = [];
+  private gateDiodes: Graphics[] = [];
+  /** 上升气流柱动画 */
+  private windStreams: Array<{ g: Graphics; x: number; w: number; h: number }> = [];
 
   constructor(private assets: GameAssets) {}
 
@@ -48,6 +52,9 @@ export class WorldView {
     this.boostFx = [];
     this.pendulumSprites = [];
     this.pendulumChains = [];
+    this.gateBeams = [];
+    this.gateDiodes = [];
+    this.windStreams = [];
 
     // 坑底暗色
     const backdrop = new Graphics();
@@ -261,6 +268,45 @@ export class WorldView {
       this.root.addChild(g);
     }
 
+    // 上升气流柱：向上流动的半透明风纹背景
+    if (track.winds) {
+      for (const wz of track.winds) {
+        const root = new Container();
+        const bg = new Graphics();
+        bg.rect(wz.x, GROUND_Y - wz.h, wz.w, wz.h).fill({ color: 0x8fd3ff, alpha: 0.12 });
+        bg.rect(wz.x, GROUND_Y - wz.h, wz.w, 4).fill({ color: 0xc4eeff, alpha: 0.45 });
+        root.addChild(bg);
+        const streamG = new Graphics();
+        root.addChild(streamG);
+        this.windStreams.push({ g: streamG, x: wz.x, w: wz.w, h: wz.h });
+        this.root.addChild(root);
+      }
+    }
+
+    // 激光闸门：金属基座 + 周期性高能光柱
+    if (track.gates) {
+      for (const gt of track.gates) {
+        const root = new Container();
+        // 顶部与底部金属发生器基座
+        const posts = new Graphics();
+        posts.roundRect(gt.x - 3, GROUND_Y - 8, gt.w + 6, 10, 3).fill(0x364052).stroke({ width: 1.5, color: 0x1a212e });
+        posts.roundRect(gt.x - 3, gt.y - 2, gt.w + 6, 10, 3).fill(0x364052).stroke({ width: 1.5, color: 0x1a212e });
+        root.addChild(posts);
+
+        // 状态指示灯
+        const diode = new Graphics();
+        root.addChild(diode);
+        this.gateDiodes.push(diode);
+
+        // 激光束（由 setTick 控制通电与否）
+        const beam = new Graphics();
+        root.addChild(beam);
+        this.gateBeams.push(beam);
+
+        this.root.addChild(root);
+      }
+    }
+
     // 终点旗
     const pole = new Graphics();
     pole.rect(track.finishX - 3, GROUND_Y - 176, 6, 176).fill(0xe8edf5);
@@ -320,7 +366,7 @@ export class WorldView {
     }
   }
 
-  /** 同步模拟 tick：升降台按三角波就位；钉球摆链按 tick 纯函数定位（每帧调用） */
+  /** 同步模拟 tick：升降台按三角波就位；钉球摆链按 tick 纯函数定位；激光闸门通断电（每帧调用） */
   setTick(tick: number): void {
     this.simTick = tick;
     const t = this.track;
@@ -343,6 +389,31 @@ export class WorldView {
         const ax = (pd.x0 + pd.x1) / 2;
         const ay = pd.highY - (pd.highY - pd.lowY) - 60;
         chain.moveTo(bob.x, bob.y).lineTo(ax, ay).stroke({ width: 2.5, color: 0x6d7a92, alpha: 0.85 });
+      }
+    }
+    if (t.gates) {
+      for (let i = 0; i < t.gates.length; i++) {
+        const gt = t.gates[i]!;
+        const active = isGateActive(gt, tick);
+        const beam = this.gateBeams[i];
+        const diode = this.gateDiodes[i];
+        if (diode) {
+          diode.clear();
+          diode.circle(gt.x + gt.w / 2, GROUND_Y - 3, 3).fill(active ? 0xff4d6d : 0x52b788);
+          diode.circle(gt.x + gt.w / 2, gt.y + 3, 3).fill(active ? 0xff4d6d : 0x52b788);
+        }
+        if (beam) {
+          beam.clear();
+          if (active) {
+            // 通电高能激光束
+            beam.rect(gt.x + 2, gt.y + 6, gt.w - 4, gt.h - 12).fill({ color: 0xff2a55, alpha: 0.75 });
+            beam.rect(gt.x + 5, gt.y + 6, gt.w - 10, gt.h - 12).fill({ color: 0xffffff, alpha: 0.95 });
+            beam.rect(gt.x - 2, gt.y + 6, gt.w + 4, gt.h - 12).fill({ color: 0xff758f, alpha: 0.35 });
+          } else {
+            // 待机淡绿提示线
+            beam.rect(gt.x + gt.w / 2 - 1, gt.y + 6, 2, gt.h - 12).fill({ color: 0x52b788, alpha: 0.15 });
+          }
+        }
       }
     }
   }
@@ -405,6 +476,18 @@ export class WorldView {
       const k = 1 + Math.sin(tSec * 3.2 + i * 1.7) * 0.08;
       g.scale.set(k);
       g.rotation = Math.sin(tSec * 1.4 + i) * 0.12;
+    }
+    // 气流柱动画：向上流动的风线
+    for (const ws of this.windStreams) {
+      ws.g.clear();
+      const nLines = Math.floor(ws.w / 36);
+      for (let i = 0; i < nLines; i++) {
+        const lx = ws.x + 18 + i * 36 + Math.sin(tSec * 2 + i) * 6;
+        const speed = 180;
+        const lyOffset = (tSec * speed + i * 45) % ws.h;
+        const ly = GROUND_Y - lyOffset;
+        ws.g.moveTo(lx, ly).lineTo(lx, Math.max(GROUND_Y - ws.h, ly - 22)).stroke({ width: 2, color: 0xc4eeff, alpha: 0.65 });
+      }
     }
     // 加速带箭头循环滚动
     for (const fx of this.boostFx) {

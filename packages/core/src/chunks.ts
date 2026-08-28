@@ -23,7 +23,10 @@ import {
   tapJumpHeight,
   type MoverDef,
   type PendulumDef,
+  type GateDef,
 } from './tuning.js';
+
+export type { GateDef } from './tuning.js';
 
 /** 世界常量（渲染层也从这里取） */
 export const GROUND_Y = 460; // 地面顶部 y
@@ -90,6 +93,7 @@ export interface Track {
   rings: Ring[];
   winds: WindZone[];
   pendulums: PendulumDef[];
+  gates: GateDef[];
   finishX: number;
   length: number;
 }
@@ -107,6 +111,7 @@ class Builder {
   rings: Ring[] = [];
   winds: WindZone[] = [];
   pendulums: PendulumDef[] = [];
+  gates: GateDef[] = [];
 
   run(dx: number): void {
     this.cursor += dx;
@@ -314,24 +319,24 @@ function chRing(b: Builder, r: Rng): void {
  *  飞出柱顶即恢复正常重力抛物线落向对岸。 */
 function chUpdraft(b: Builder, r: Rng): void {
   b.run(rngRange(r, 150, 220));
-  // 1.18~1.34 倍射程，扣除 40px 对岸搁板后仍保证"裸跳必死"
-  const W = Math.round(holdJumpRange * rngRange(r, 1.18, 1.34));
+  // 1.15~1.28 倍射程，配合 80px 对岸平台，确保起跳与落点窗口充裕
+  const W = Math.round(holdJumpRange * rngRange(r, 1.15, 1.28));
   const gx = b.cursor;
-  b.gap(W - 40); // 对岸搁板：多给 40px 落点容错
-  b.run(40);
-  // 柱体覆盖全坑并向两侧各探出 40px
-  const h = 250;
+  b.gap(W - 80); // 对岸搁板：多给 80px 落点容错
+  b.run(80);
+  // 柱体覆盖全坑并向两侧各探出 50px
+  const h = 240;
   b.winds.push({
-    x: gx - 40,
-    w: W + 80,
+    x: gx - 50,
+    w: W + 100,
     h,
     factor: UPDRAFT_G_FACTOR,
   });
   // 高空宝石阶梯：贴着柱内攀升路线摆放
   b.coins.push(
     { x: gx + W * 0.25, y: GROUND_Y - 130, got: false },
-    { x: gx + W * 0.5, y: GROUND_Y - 205, got: false },
-    { x: gx + W * 0.72, y: GROUND_Y - 165, got: false },
+    { x: gx + W * 0.5, y: GROUND_Y - 200, got: false },
+    { x: gx + W * 0.72, y: GROUND_Y - 160, got: false },
   );
   b.run(rngRange(r, 140, 200));
 }
@@ -357,6 +362,33 @@ function chPendulum(b: Builder, r: Rng): void {
   );
   b.run(CW);
   b.run(rngRange(r, 140, 200));
+}
+
+/** 激光闸门：地面垂直高能激光，周期性通电与关闭。
+ *  掐准断电窗口冲刺穿过，或起跳飞跃顶端吃高空金币。 */
+function chGate(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 150, 240));
+  const gx = b.cursor;
+  const gateH = 80;
+  const period = Math.round(rngRange(r, 130, 170));
+  const active = Math.round(period * rngRange(r, 0.42, 0.50));
+  const phase = Math.round(rngRange(r, 0, period - 1));
+  b.gates.push({
+    x: gx + 40,
+    y: GROUND_Y - gateH,
+    w: 16,
+    h: gateH,
+    periodTicks: period,
+    activeTicks: active,
+    phase,
+  });
+  // 高处宝石（飞跃路线）与低处穿行宝石
+  b.coins.push(
+    { x: gx + 48, y: GROUND_Y - gateH - 35, got: false },
+    { x: gx + 110, y: GROUND_Y - 48, got: false },
+  );
+  b.run(160);
+  b.run(rngRange(r, 120, 180));
 }
 
 /** 碎裂天梯：三层碎裂板逐级攀升，踩板即倒计时 —— 一路小跳别回头，顶端高币犒赏节奏大师。 */
@@ -397,7 +429,8 @@ type ChunkName =
   | 'ring'
   | 'updraft'
   | 'pendulum'
-  | 'crumblestairs';
+  | 'crumblestairs'
+  | 'gate';
 
 function pickChunk(b: Builder, r: Rng): void {
   const names: ChunkName[] = ['flat', 'flat', 'gap0', 'spike0', 'stairs'];
@@ -408,14 +441,12 @@ function pickChunk(b: Builder, r: Rng): void {
     weights.push(2, 2, 2, 1, 2);
   }
   if (p >= 0.35) {
-    names.push('padpit', 'crumble', 'elevator');
-    weights.push(1, 2, 2);
-    // 'updraft' 暂缓入池：浮空落点窗口过窄（±40px 量级），Bot 与新手都易坠，
-    // 手感调优后再开放（代码/测试保留）。
+    names.push('padpit', 'crumble', 'elevator', 'updraft');
+    weights.push(1, 2, 2, 2);
   }
   if (p >= 0.45) {
-    names.push('crumblestairs');
-    weights.push(1);
+    names.push('crumblestairs', 'gate');
+    weights.push(1, 2);
   }
   if (p >= 0.55) {
     names.push('gap2', 'spike2', 'boost', 'ring', 'pendulum');
@@ -459,6 +490,8 @@ function pickChunk(b: Builder, r: Rng): void {
       return chPendulum(b, r);
     case 'crumblestairs':
       return chCrumbleStairs(b, r);
+    case 'gate':
+      return chGate(b, r);
   }
 }
 
@@ -481,6 +514,7 @@ export function buildTrack(seed: bigint): Track {
     rings: b.rings.sort((a, z) => a.x - z.x),
     winds: b.winds.sort((a, z) => a.x - z.x),
     pendulums: b.pendulums.sort((a, z) => a.x0 - z.x0),
+    gates: b.gates.sort((a, z) => a.x - z.x),
     finishX,
     length: b.cursor,
   };

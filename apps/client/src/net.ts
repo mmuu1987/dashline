@@ -3,6 +3,7 @@ import type { BoardEntry, RunPayload } from '@dashline/shared';
 export type { BoardEntry };
 
 /** M0 网络层：全部优雅降级 —— API 不在线就静默进入本地模式，绝不阻塞玩法。 */
+const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/+$/, '');
 
 let online: boolean | null = null;
 
@@ -11,7 +12,7 @@ export async function probeApi(): Promise<boolean> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 1200);
-    const res = await fetch('/v1/daily/today', { signal: ctrl.signal });
+    const res = await fetch(`${API_BASE}/v1/daily/today`, { signal: ctrl.signal });
     clearTimeout(timer);
     online = res.ok;
   } catch {
@@ -54,7 +55,7 @@ export interface AuthInfo {
 /** 匿名设备注册；失败返回 null（本地模式） */
 export async function registerDevice(): Promise<AuthInfo | null> {
   try {
-    const res = await fetch('/v1/auth/device', {
+    const res = await fetch(`${API_BASE}/v1/auth/device`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ deviceId: deviceId(), platform: 'web' }),
@@ -79,7 +80,7 @@ export interface SubmitAck {
 export async function submitRun(payload: RunPayload, auth: AuthInfo | null): Promise<SubmitAck> {
   if (!auth) return { ok: false };
   try {
-    const res = await fetch('/v1/runs', {
+    const res = await fetch(`${API_BASE}/v1/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${auth.token}` },
       body: JSON.stringify(payload),
@@ -110,7 +111,7 @@ export async function submitRun(payload: RunPayload, auth: AuthInfo | null): Pro
 
 export async function fetchBoard(date: string): Promise<BoardEntry[] | null> {
   try {
-    const res = await fetch(`/v1/leaderboards/daily/${date}`);
+    const res = await fetch(`${API_BASE}/v1/leaderboards/daily/${date}`);
     if (!res.ok) return null;
     const data = (await res.json()) as { entries: BoardEntry[] };
     return data.entries;
@@ -129,7 +130,7 @@ export interface GhostOffer {
 
 export async function fetchGhosts(date: string): Promise<GhostOffer[] | null> {
   try {
-    const res = await fetch(`/v1/ghosts/daily/${date}`);
+    const res = await fetch(`${API_BASE}/v1/ghosts/daily/${date}`);
     if (!res.ok) return null;
     const data = (await res.json()) as { ghosts: GhostOffer[] };
     return data.ghosts;

@@ -5,6 +5,7 @@ export interface ResultData {
   timeMs: number;
   score: number;
   coins: number;
+  streak?: number;
   ghostDelta: string | null;
   onRetry: () => void;
   onCard: () => void;
@@ -37,9 +38,10 @@ export class Hud {
       `📏 ${distanceM}m   🪙 ${coinCount}`;
   }
 
-  setMeta(attempts: number, bestText: string, opponent?: string): void {
+  setMeta(attempts: number, bestText: string, opponent?: string, streak?: number): void {
+    const streakBadge = streak && streak > 0 ? ` · 🔥 ${streak}连胜` : '';
     this.meta.textContent =
-      `尝试 #${attempts}\n今日最佳 ${bestText}` + (opponent ? `\n${opponent}` : '');
+      `尝试 #${attempts}${streakBadge}\n今日最佳 ${bestText}` + (opponent ? `\n${opponent}` : '');
   }
 
   setMode(text: string): void {
@@ -62,10 +64,11 @@ export class Hud {
     const title = d.finished ? '🏁 完赛！' : '💥 撞毁了…';
     const time = d.finished ? `⏱ 用时 <b>${(d.timeMs / 1000).toFixed(2)}s</b>` : `📏 距离 <b>${Math.floor(d.score / 100)}m</b>`;
     const ghost = d.ghostDelta ? `<div class="row">${d.ghostDelta}</div>` : '';
+    const streakTag = d.streak && d.streak > 0 ? ` · 🔥 ${d.streak}天连胜` : '';
     this.panel.innerHTML = `
       <h2>${title}</h2>
       <div class="big">${(d.finished ? d.timeMs / 1000 : d.score).toLocaleString?.() ?? ''}${d.finished ? ' s' : ' 分'}</div>
-      <div class="row">${time} · 🪙 ${d.coins}</div>
+      <div class="row">${time} · 🪙 ${d.coins}${streakTag}</div>
       ${ghost}
       <div class="btns">
         <button id="btn-retry">再跑一次</button>

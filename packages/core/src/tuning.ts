@@ -128,9 +128,9 @@ export function holdArcHeightAt(dx: number): number | null {
   return null;
 }
 
-// ---------- 新积木（第三批）：上升气流柱 / 横扫钉球 ----------
+// ---------- 新积木（第三批）：上升气流柱 / 横扫钉球 / 激光闸门 ----------
 /** 气流柱内重力系数（<1 减重漂浮；飞出柱顶恢复正常重力） */
-export const UPDRAFT_G_FACTOR = 0.34;
+export const UPDRAFT_G_FACTOR = 0.40;
 /** 钉球碰撞半径 */
 export const PENDULUM_R = 17;
 /** 钉球摆位：tick 的纯函数（三角波，不用三角函数保证跨引擎逐位一致）。
@@ -161,6 +161,28 @@ export function pendulumBob(
     x: (p.x0 + p.x1) / 2 + ((p.x1 - p.x0) / 2) * tri,
     y: p.highY - (p.highY - p.lowY) * Math.abs(tri),
   };
+}
+
+/** 激光闸门定义：周期性通电的激光束。
+ *  tick 的纯函数：只用整数取模，零三角函数，跨引擎逐位一致。
+ *  通电中：触碰即死；断电中：安全通行。
+ */
+export interface GateDef {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 完整周期 tick 数 */
+  periodTicks: number;
+  /** 处于危险通电态的 tick 数 */
+  activeTicks: number;
+  /** 相位偏移 tick */
+  phase: number;
+}
+
+export function isGateActive(g: GateDef, tick: number): boolean {
+  const u = (((tick + g.phase) % g.periodTicks) + g.periodTicks) % g.periodTicks;
+  return u < g.activeTicks;
 }
 
 // ---------- 落点宽容（与 world.ts 的支撑判定一致：±0.6R）----------

@@ -16,14 +16,14 @@ import {
   STEP_S,
   TICK_RATE,
 } from '@dashline/shared';
-import { GROUND_Y, PIT_Y, buildTrack, type Plat, type Track, type WindZone } from './chunks.js';
+import { GROUND_Y, PIT_Y, buildTrack, type Plat, type Track, type WindZone, type GateDef } from './chunks.js';
 
 export { GROUND_Y, PIT_Y } from './chunks.js';
-export type { Track, GroundSeg, Hazard, Coin, Plat, Pad } from './chunks.js';
-export { PLAYER_R, CRUMBLE_TICKS, bounceV, PENDULUM_R } from './tuning.js';
+export type { Track, GroundSeg, Hazard, Coin, Plat, Pad, GateDef } from './chunks.js';
+export { PLAYER_R, CRUMBLE_TICKS, bounceV, PENDULUM_R, isGateActive } from './tuning.js';
 export { TUNING, tapJumpHeight, holdJumpHeight, pendulumBob } from './tuning.js';
 
-import { PLAYER_R, TUNING, CRUMBLE_TICKS, bounceV, BOOST_FACTOR, BOOST_TICKS, djumpV, moverOffsetY, UPDRAFT_G_FACTOR, PENDULUM_R, pendulumBob } from './tuning.js';
+import { PLAYER_R, TUNING, CRUMBLE_TICKS, bounceV, BOOST_FACTOR, BOOST_TICKS, djumpV, moverOffsetY, UPDRAFT_G_FACTOR, PENDULUM_R, pendulumBob, isGateActive } from './tuning.js';
 
 export const START_X = 80;
 export const START_Y = GROUND_Y - PLAYER_R;
@@ -32,7 +32,7 @@ export type SimEvent =
   | { type: 'jump' }
   | { type: 'land' }
   | { type: 'coin'; index: number }
-  | { type: 'crash'; cause: 'spike' | 'pit' | 'ball' }
+  | { type: 'crash'; cause: 'spike' | 'pit' | 'ball' | 'laser' }
   | { type: 'bounce' }
   | { type: 'crumble'; index: number }
   | { type: 'ring'; index: number }
@@ -357,6 +357,20 @@ export class World {
       }
     }
 
+    // ---- 激光闸门（圆 vs AABB；仅在危险通电激活时致死）----
+    if (this.track.gates) {
+      for (const gt of this.track.gates) {
+        if (gt.x > this._x + 64) break;
+        if (this._x + PLAYER_R < gt.x) continue;
+        if (isGateActive(gt, this.tick)) {
+          if (circleHitsRect(this._x, this._y, PLAYER_R * 0.8, gt.x, gt.y, gt.w, gt.h)) {
+            this.die('laser');
+            return;
+          }
+        }
+      }
+    }
+
     // ---- 坠坑 ----
     if (this._y - PLAYER_R > PIT_Y) {
       this.die('pit');
@@ -373,7 +387,7 @@ export class World {
     this._score = Math.floor(this._x / 25) * 100 + this._coinsGot * 50;
   }
 
-  private die(cause: 'spike' | 'pit' | 'ball'): void {
+  private die(cause: 'spike' | 'pit' | 'ball' | 'laser'): void {
     this._alive = false;
     this.evq.push({ type: 'crash', cause });
   }

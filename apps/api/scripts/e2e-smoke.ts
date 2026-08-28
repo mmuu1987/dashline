@@ -1,10 +1,11 @@
-﻿/**
+/**
  * E2E 冒烟：真实模拟一局 → 提交（应通过重放验证）
  *          → 篡改分数再提交（应被 SCORE_MISMATCH 拒绝）
  * 前置：API 已在 :8787 运行。
  */
 import { createWorld } from '@dashline/core';
 import {
+  CORE_VERSION,
   encodeInputs,
   IN_JUMP_HELD,
   IN_JUMP_PRESS,
@@ -90,7 +91,7 @@ const r1 = await postJson(
     date,
     ...run,
     attemptNo: 1,
-    clientVersion: 'core.1',
+    clientVersion: CORE_VERSION,
   },
   p1.token,
 );
@@ -110,7 +111,7 @@ const r2 = await postJson(
     ...run,
     score: run.score + 12345,
     attemptNo: 1,
-    clientVersion: 'core.1',
+    clientVersion: CORE_VERSION,
   },
   p2.token,
 );

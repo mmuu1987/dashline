@@ -21,12 +21,14 @@ import {
   decodeInputs,
   encodeInputs,
   seedForDate,
+  themeForSeed,
   todayUTC,
   type RunPayload,
 } from '@dashline/shared';
 import { Sfx } from './audio.js';
 import { Hud } from './hud.js';
 import { InputBuffer } from './input.js';
+import { calculateStreak, saveDayRecord } from './meta.js';
 import {
   fetchBoard,
   fetchGhosts,
@@ -40,6 +42,7 @@ import {
   type GhostOffer,
 } from './net.js';
 import { GameView, VIEW_H, VIEW_W } from './render.js';
+import { THEMES } from './render/background.js';
 import { loadAssets } from './render/textures.js';
 import { exportShareCard, renderShareCard } from './share-card.js';
 
@@ -87,12 +90,24 @@ async function boot(): Promise<void> {
   const hud = new Hud();
   const sfx = new Sfx();
   const assets = await loadAssets();
-  const view = new GameView(assets);
+
+  // ---- 每日种子与主题 ----
+  const dateStr = todayUTC();
+  const seed = seedForDate(dateStr);
+  const themeId = themeForSeed(seed);
+  const ghostKey = `dl_best_${dateStr}`;
+  let streak = calculateStreak(dateStr);
+
+  const view = new GameView(assets, themeId);
   app.stage.addChild(view.root);
   const input = new InputBuffer();
   input.attach(app.canvas);
   window.addEventListener('pointerdown', () => sfx.unlock());
   window.addEventListener('keydown', () => sfx.unlock());
+
+  // 主题提示
+  const currentTheme = THEMES[themeId] ?? THEMES[0]!;
+  setTimeout(() => hud.toast(`🎨 今日主题：${currentTheme.name}`), 400);
 
   // ---- 静音按钮（状态持久化在 Sfx 内）----
   const muteBtn = document.getElementById('btn-mute')!;
@@ -102,11 +117,6 @@ async function boot(): Promise<void> {
     muteBtn.textContent = muted ? '🔇' : '🔊';
     if (!muted) sfx.unlock(); // 解除静音时顺带恢复 BGM
   });
-
-  // ---- 每日种子 ----
-  const dateStr = todayUTC();
-  const seed = seedForDate(dateStr);
-  const ghostKey = `dl_best_${dateStr}`;
 
   // ---- 状态 ----
   let phase: Phase = 'run';
@@ -234,7 +244,7 @@ async function boot(): Promise<void> {
     armRacer();
     phase = 'run';
     hud.hideResult();
-    hud.setMeta(attempts, best ? fmtBest(best) : '--', racer.label || undefined);
+    hud.setMeta(attempts, best ? fmtBest(best) : '--', racer.label || undefined, streak);
   }
 
   input.onRestart(() => {
@@ -301,7 +311,21 @@ async function boot(): Promise<void> {
 
   function commitAttempt(): void {
     const rec = saveBestIfBetter();
-    hud.setMeta(attempts, best ? fmtBest(best) : '--', racer.label || undefined);
+    const s = world.snapshot;
+    if (s.score > 0) {
+      saveDayRecord({
+        date: dateStr,
+        score: s.score,
+        timeMs: s.timeMs,
+        distanceM: s.distanceM,
+        coins: s.coinCount,
+        finished: s.finished,
+        attempts,
+        updatedAt: Date.now(),
+      });
+      streak = calculateStreak(dateStr);
+    }
+    hud.setMeta(attempts, best ? fmtBest(best) : '--', racer.label || undefined, streak);
     if (rec) void pushToApi(rec);
   }
 
@@ -374,6 +398,7 @@ async function boot(): Promise<void> {
       timeMs: s.timeMs,
       score: s.score,
       coins: s.coinCount,
+      streak,
       ghostDelta: delta,
       onRetry: () => resetAttempt(),
       onCard: () => void makeShareCard(),
