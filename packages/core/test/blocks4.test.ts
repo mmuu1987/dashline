@@ -49,6 +49,9 @@ class TB {
       winds: [],
       pendulums: [],
       gates: this.gates,
+      portals: [],
+      shields: [],
+      magnets: [],
       finishX,
       length: this.cursor,
     };

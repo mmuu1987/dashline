@@ -93,19 +93,72 @@ export class Sfx {
     this.beep(460, 0.12, 'square', 0.04, 720);
   }
   land(): void {
-    this.combo = 0;
     this.beep(150, 0.06, 'sine', 0.05);
   }
-  coin(): void {
-    this.combo++;
-    const f = 620 * Math.pow(1.059, Math.min(this.combo, 24)); // 连击音高递增
-    this.beep(f, 0.09, 'square', 0.035);
+  /** 宝石拾取：根据连击数按大调五声音阶攀升，极其悦耳 */
+  coin(combo = 1): void {
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+    const note = scale[Math.min(combo - 1, scale.length - 1)]!;
+    const f = 523.25 * Math.pow(2, note / 12);
+    this.beep(f, 0.11, 'sine', 0.045);
+    // 高连击叠加晶莹八度谐波
+    if (combo >= 4) {
+      setTimeout(() => this.beep(f * 2, 0.08, 'triangle', 0.025), 25);
+    }
   }
   crash(): void {
     this.beep(220, 0.3, 'sawtooth', 0.07, 55);
   }
+  /** 终点盛典：宏大辉煌胜利和弦（C大调多声部齐奏） */
   finish(): void {
-    [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.beep(f, 0.16, 'square', 0.05), i * 110));
+    const notes = [
+      { f: 523.25, d: 0 },
+      { f: 659.25, d: 80 },
+      { f: 783.99, d: 160 },
+      { f: 1046.5, d: 240 },
+      { f: 1318.5, d: 340 },
+      { f: 1567.98, d: 440 },
+      { f: 2093.0, d: 560 },
+    ];
+    for (const n of notes) {
+      setTimeout(() => {
+        this.beep(n.f, 0.35, 'triangle', 0.06);
+        this.beep(n.f * 0.5, 0.45, 'sine', 0.04);
+      }, n.d);
+    }
+  }
+  /** 极限擦刺：惊险金属电光微刮擦 */
+  nearmiss(): void {
+    this.beep(1760, 0.05, 'sawtooth', 0.03, 3520);
+  }
+  /** 拾取护盾星：高贵空灵水晶能量共鸣 */
+  shield(): void {
+    this.beep(587.33, 0.12, 'sine', 0.05);
+    setTimeout(() => this.beep(880.0, 0.18, 'sine', 0.06), 80);
+    setTimeout(() => this.beep(1174.66, 0.25, 'triangle', 0.05), 160);
+  }
+  /** 护盾碎裂：强力晶体破碎与能量震荡 */
+  shieldBreak(): void {
+    this.beep(400, 0.2, 'sawtooth', 0.06, 120);
+    const ctx = this.ctx;
+    if (ctx && this.master && this.noiseBuf && ctx.state === 'running') {
+      const t = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      src.connect(g).connect(this.master);
+      src.start(t);
+    }
+  }
+  /** 重力翻转：深邃引力波呼啸 */
+  portal(): void {
+    this.beep(180, 0.32, 'sine', 0.07, 720);
+  }
+  /** 磁铁激活：高频磁电脉冲 */
+  magnet(): void {
+    this.beep(440, 0.15, 'triangle', 0.05, 880);
   }
   /** 拾取二段跳环：双升音 */
   ring(): void {

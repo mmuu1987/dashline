@@ -1,10 +1,6 @@
 /**
  * 客户端主循环 —— 固定步长逻辑 + 渲染（60Hz rAF）。
- * 职责：装配 core/输入/渲染/HUD/音频/网络，维护"尝试"状态机与 Ghost 对手选择。
- *
- * 对手优先级（每次尝试重新裁定）：
- *   1. 好友复仇链接（URL #g=…）  2. 榜单点名的挑战目标
- *   3. 远程榜首（API 下发输入流） 4. 本地今日最佳之你
+ * 职责：装配 core/输入/渲染/HUD/音频/网络/衣橱/成就，维护"尝试"状态机与 Ghost 对手选择。
  */
 import { Application } from 'pixi.js';
 import {
@@ -45,6 +41,8 @@ import { GameView, VIEW_H, VIEW_W } from './render.js';
 import { THEMES } from './render/background.js';
 import { loadAssets } from './render/textures.js';
 import { exportShareCard, renderShareCard } from './share-card.js';
+import { Wardrobe } from './wardrobe.js';
+import { Achievements } from './achievements.js';
 
 const STEP_S = 1 / 60;
 
@@ -63,11 +61,9 @@ interface FriendChallenge {
   timeMs: number | null;
 }
 
-/** 当前 Ghost 对手 */
 interface Racer {
   label: string;
   bytes: Uint8Array | null;
-  /** 对手完赛用时（null=未完赛，无法判胜负） */
   timeMs: number | null;
 }
 
@@ -80,7 +76,6 @@ async function boot(): Promise<void> {
     height: VIEW_H,
     background: '#12141c',
     antialias: true,
-    // 手机高分屏清晰渲染（上限 2x 控制填充率开销）
     resolution: Math.min(window.devicePixelRatio || 1, 2),
     autoDensity: false,
   });
@@ -89,6 +84,8 @@ async function boot(): Promise<void> {
 
   const hud = new Hud();
   const sfx = new Sfx();
+  const wardrobe = new Wardrobe();
+  const achievements = new Achievements();
   const assets = await loadAssets();
 
   // ---- 每日种子与主题 ----
@@ -99,7 +96,9 @@ async function boot(): Promise<void> {
   let streak = calculateStreak(dateStr);
 
   const view = new GameView(assets, themeId);
+  view.setSkin(wardrobe.getEquippedSkin());
   app.stage.addChild(view.root);
+
   const input = new InputBuffer();
   input.attach(app.canvas);
   window.addEventListener('pointerdown', () => sfx.unlock());
@@ -109,13 +108,13 @@ async function boot(): Promise<void> {
   const currentTheme = THEMES[themeId] ?? THEMES[0]!;
   setTimeout(() => hud.toast(`🎨 今日主题：${currentTheme.name}`), 400);
 
-  // ---- 静音按钮（状态持久化在 Sfx 内）----
+  // ---- 静音按钮 ----
   const muteBtn = document.getElementById('btn-mute')!;
   muteBtn.textContent = sfx.isMuted() ? '🔇' : '🔊';
   muteBtn.addEventListener('click', () => {
     const muted = sfx.toggleMute();
     muteBtn.textContent = muted ? '🔇' : '🔊';
-    if (!muted) sfx.unlock(); // 解除静音时顺带恢复 BGM
+    if (!muted) sfx.unlock();
   });
 
   // ---- 暂停按钮与快捷键 ----
@@ -135,16 +134,53 @@ async function boot(): Promise<void> {
     }
   }
   pauseBtn.addEventListener('click', togglePause);
-  document.getElementById('btn-resume')?.addEventListener('click', togglePause);
-  document.getElementById('btn-pause-retry')?.addEventListener('click', () => {
-    if (phase === 'pause') {
-      phase = 'run';
-      hud.showPause(false);
-      pauseBtn.textContent = '⏸';
-    }
-    resetAttempt();
-  });
   input.onPause(() => togglePause());
+
+  let prevModalPhase: Phase | null = null;
+  function enterModal(): void {
+    if (phase === 'run') {
+      prevModalPhase = phase;
+      phase = 'pause';
+    }
+  }
+  function exitModal(): void {
+    hud.hideResult();
+    if (prevModalPhase) {
+      phase = prevModalPhase;
+      prevModalPhase = null;
+      last = performance.now();
+      acc = 0;
+    }
+  }
+
+  // ---- 外观衣橱按钮 ----
+  const wardrobeBtn = document.getElementById('btn-wardrobe')!;
+  function openWardrobe(): void {
+    enterModal();
+    hud.showWardrobe(
+      wardrobe.getAllSkins(),
+      wardrobe.getTotalCoins(),
+      wardrobe.getEquippedSkinId(),
+      (id) => {
+        const res = wardrobe.equipOrBuy(id);
+        hud.toast(res.msg);
+        if (res.ok) {
+          view.setSkin(wardrobe.getEquippedSkin());
+          openWardrobe();
+        }
+      },
+      exitModal,
+    );
+  }
+  wardrobeBtn.addEventListener('click', openWardrobe);
+
+  // ---- 成就徽章按钮 ----
+  const achBtn = document.getElementById('btn-achievements')!;
+  function openAchievements(): void {
+    enterModal();
+    hud.showAchievements(achievements.getAll(), exitModal);
+  }
+  achBtn.addEventListener('click', openAchievements);
 
   // ---- 状态 ----
   let phase: Phase = 'run';
@@ -153,6 +189,9 @@ async function boot(): Promise<void> {
   let world: World = createWorld(seed);
   let recorder: number[] = [];
   let best: BestRecord | null = null;
+  let usedShieldInRun = false;
+  let nearMissCountInRun = 0;
+
   try {
     const raw = lsGet(ghostKey);
     if (raw) best = JSON.parse(raw) as BestRecord;
@@ -160,64 +199,67 @@ async function boot(): Promise<void> {
     best = null;
   }
 
-  let apiOnline = false;
-  let auth: AuthInfo | null = null;
-  let remoteTop: GhostOffer | null = null;
-  let ghostOffers: GhostOffer[] = [];
-
-  void probeApi().then(async (ok) => {
-    apiOnline = ok;
-    hud.setMode(ok ? '在线模式 · 榜单已连接' : '本地模式 · 挑战今日最佳之你');
-    if (!ok) return;
-    auth = await registerDevice();
-    const offers = await fetchGhosts(dateStr);
-    if (offers && offers.length > 0) {
-      ghostOffers = offers;
-      remoteTop = offers[0]!;
-      hud.toast(`👑 榜首 ${remoteTop.nickname} 的 Ghost 已就位`);
-    }
-  });
-
-  const fmtBest = (b: BestRecord): string =>
-    b.finished ? `${(b.timeMs / 1000).toFixed(2)}s` : `${b.distanceM}m`;
-
-  // ---- 好友复仇链接（URL hash 即挑战状态，离线也可用）----
-  function readFriendChallenge(): FriendChallenge | null {
-    const raw = location.hash.startsWith('#') ? location.hash.slice(1) : '';
-    if (!raw.includes('g=')) return null;
-    const p = new URLSearchParams(raw);
-    const g = p.get('g');
-    if (!g || g.length > 4096) return null;
+  // ---- 好友复仇 URL 参数解析 ----
+  function parseFriendChallenge(): FriendChallenge | null {
     try {
-      decodeInputs(g); // 校验合法性
-      const t = p.get('t');
+      const hash = location.hash.slice(1);
+      if (!hash) return null;
+      const params = new URLSearchParams(hash);
+      const g = params.get('g');
+      if (!g) return null;
+      const name = params.get('n') || '好友';
+      const t = params.get('t');
       return {
         inputsB64: g,
-        name: p.get('n') ?? '好友',
-        timeMs: t ? Number(t) : null,
+        name: decodeURIComponent(name),
+        timeMs: t ? parseInt(t, 10) : null,
       };
     } catch {
       return null;
     }
   }
-  const friend = readFriendChallenge();
+  const friendChallenge = parseFriendChallenge();
+  if (friendChallenge) {
+    hud.toast(`⚔ 接受来自【${friendChallenge.name}】的复仇挑战！`);
+  }
 
-  // ---- Racer（当前对手）----
+  // ---- 网络：探测 API 与注册设备 ----
+  let auth: AuthInfo | null = null;
+  let apiOnline = false;
+  let ghostOffers: GhostOffer[] = [];
+  let forcedOffer: GhostOffer | null = null;
+
+  void (async () => {
+    apiOnline = await probeApi();
+    hud.setMode(apiOnline ? '在线模式 · 榜单已连接' : '单机模式');
+    if (apiOnline) {
+      auth = await registerDevice();
+      const offers = await fetchGhosts(dateStr);
+      if (offers) ghostOffers = offers;
+    }
+  })();
+
+  // ---- Ghost 对手分配 ----
   let racer: Racer = { label: '', bytes: null, timeMs: null };
   let racerWorld: World = createWorld(seed);
   let racerIdx = 0;
   let racerDone = true;
-  let forcedOffer: GhostOffer | null = null;
   let startLabel = '';
   let startTimeMs: number | null = null;
   let lastDelta: string | null = null;
-  let prevCharge = 0; // 蓄力音状态机（表现层）
+
+  function fmtBest(b: BestRecord): string {
+    return b.finished ? `${(b.timeMs / 1000).toFixed(2)}s` : `${b.distanceM}m`;
+  }
 
   function armRacer(): void {
-    const f = friend ?? null;
-    if (f) {
+    if (friendChallenge) {
       try {
-        racer = { label: `⚔ ${f.name}`, bytes: decodeInputs(f.inputsB64), timeMs: f.timeMs };
+        racer = {
+          label: `⚔ ${friendChallenge.name}`,
+          bytes: decodeInputs(friendChallenge.inputsB64),
+          timeMs: friendChallenge.timeMs,
+        };
       } catch {
         racer = { label: '', bytes: null, timeMs: null };
       }
@@ -231,12 +273,13 @@ async function boot(): Promise<void> {
       } catch {
         racer = { label: '', bytes: null, timeMs: null };
       }
-    } else if (remoteTop && (!best || best.inputsB64 !== remoteTop.inputsB64)) {
+    } else if (ghostOffers.length > 0 && ghostOffers[0]) {
+      const top = ghostOffers[0];
       try {
         racer = {
-          label: `👑 ${remoteTop.nickname}`,
-          bytes: decodeInputs(remoteTop.inputsB64),
-          timeMs: remoteTop.timeMs,
+          label: `👑 榜首 ${top.nickname}`,
+          bytes: decodeInputs(top.inputsB64),
+          timeMs: top.timeMs,
         };
       } catch {
         racer = { label: '', bytes: null, timeMs: null };
@@ -269,6 +312,8 @@ async function boot(): Promise<void> {
     view.resetAttemptFx(START_X, START_Y);
     recorder = [];
     attempts++;
+    usedShieldInRun = false;
+    nearMissCountInRun = 0;
     armRacer();
     phase = 'run';
     hud.hideResult();
@@ -283,17 +328,14 @@ async function boot(): Promise<void> {
 
   // ---- 移动端适配 ----
   const rotateOverlay = document.getElementById('rotate-overlay')!;
-  /** 竖屏且屏幕偏小 → 视为手机竖屏，冻结模拟并提示旋转 */
   const isPortraitPhone = (): boolean =>
     window.innerHeight > window.innerWidth && window.innerWidth < 700;
 
-  // 切后台/失焦清空输入，防止回来时"按住跳跃"卡死
   window.addEventListener('blur', () => input.resetHeld());
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) input.resetHeld();
   });
 
-  // 全屏按钮（仅触屏设备显示）
   const fsBtn = document.getElementById('btn-fs')!;
   fsBtn.addEventListener('click', () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -318,7 +360,7 @@ async function boot(): Promise<void> {
   }
 
   async function pushToApi(rec: BestRecord): Promise<void> {
-    if (!apiOnline || !auth || !rec.finished) return; // 只上报完赛成绩
+    if (!apiOnline || !auth || !rec.finished) return;
     const payload: RunPayload = {
       scope: 'daily',
       date: dateStr,
@@ -359,7 +401,6 @@ async function boot(): Promise<void> {
     if (rec) void pushToApi(rec);
   }
 
-  /** 用本次尝试的输入流构造复仇链接 */
   function challengeUrl(): string {
     const s = world.snapshot;
     const b64 = encodeInputs(Uint8Array.from(recorder));
@@ -383,6 +424,7 @@ async function boot(): Promise<void> {
   }
 
   async function openBoard(): Promise<void> {
+    enterModal();
     hud.toast('榜单加载中…');
     const [entries, offers] = await Promise.all([fetchBoard(dateStr), fetchGhosts(dateStr)]);
     if (offers) ghostOffers = offers;
@@ -403,11 +445,11 @@ async function boot(): Promise<void> {
         const offer = ghostOffers[i];
         if (!offer) return;
         forcedOffer = offer;
-        hud.hideBoard();
+        exitModal();
         hud.toast(`将挑战 ${offer.nickname}（${(offer.timeMs / 1000).toFixed(2)}s）`);
         resetAttempt();
       },
-      () => hud.hideBoard(),
+      exitModal,
     );
   }
 
@@ -437,7 +479,6 @@ async function boot(): Promise<void> {
     });
   }
 
-  /** 生成战报卡并复制/下载 */
   async function makeShareCard(): Promise<void> {
     hud.toast('战报图生成中…');
     try {
@@ -471,20 +512,22 @@ async function boot(): Promise<void> {
           view.landSquash();
           sfx.land();
           const s = world.snapshot;
-          view.fx.dust(s.x, s.y + PLAYER_R);
+          view.fx.dust(s.x, s.y + PLAYER_R * s.gravDir);
           break;
         }
         case 'coin': {
-          sfx.coin();
+          sfx.coin(ev.combo);
+          hud.showCombo(ev.combo);
           const pt = view.getCoinPoint(ev.index);
           if (pt) view.fx.coin(pt.x, pt.y);
+          view.onCoin(ev.index);
           break;
         }
         case 'bounce': {
           const s = world.snapshot;
           view.fx.bouncePuff(s.x, s.y + PLAYER_R);
           view.addShake(3);
-          sfx.djump(); // 与二段跳共用"弹簧音"
+          sfx.djump();
           break;
         }
         case 'crumble': {
@@ -496,21 +539,57 @@ async function boot(): Promise<void> {
         case 'ring': {
           sfx.ring();
           const pt = view.getRingPoint(ev.index);
-          if (pt) view.fx.coin(pt.x, pt.y); // 金色爆发复用
+          if (pt) view.fx.coin(pt.x, pt.y);
           view.addShake(1.5);
           break;
         }
         case 'djump': {
           sfx.djump();
-          {
-            const s = world.snapshot;
-            view.fx.bouncePuff(s.x, s.y + PLAYER_R);
-          }
+          const s = world.snapshot;
+          view.fx.bouncePuff(s.x, s.y + PLAYER_R * s.gravDir);
           break;
         }
         case 'boost': {
           sfx.boost();
           view.addShake(2.5);
+          break;
+        }
+        case 'portal': {
+          sfx.portal();
+          const s = world.snapshot;
+          view.onPortal(s.x, s.y, ev.dir);
+          const ach = achievements.unlock('gravity_master');
+          if (ach) hud.toast(`🏆 解锁成就【${ach.title}】！`);
+          break;
+        }
+        case 'shield': {
+          sfx.shield();
+          view.onShield(0);
+          hud.toast('🛡️ 获得水晶护盾！');
+          break;
+        }
+        case 'shieldBreak': {
+          sfx.shieldBreak();
+          const s = world.snapshot;
+          view.onShieldBreak(s.x, s.y);
+          usedShieldInRun = true;
+          hud.toast('🛡️ 护盾抵扣了一次致命伤害！');
+          break;
+        }
+        case 'magnet': {
+          sfx.magnet();
+          view.onMagnet(0);
+          hud.toast('🧲 磁力宝石激活！');
+          break;
+        }
+        case 'nearmiss': {
+          sfx.nearmiss();
+          view.onNearMiss(ev.x, ev.y);
+          nearMissCountInRun++;
+          if (nearMissCountInRun >= 2) {
+            const ach = achievements.unlock('near_miss');
+            if (ach) hud.toast(`🏆 解锁成就【${ach.title}】！`);
+          }
           break;
         }
         case 'crash': {
@@ -519,20 +598,38 @@ async function boot(): Promise<void> {
           view.addShake(11);
           hud.flash();
           sfx.crash();
-          {
-            const s = world.snapshot;
-            view.fx.crash(s.x, s.y);
-          }
+          const s = world.snapshot;
+          view.fx.crash(s.x, s.y);
           commitAttempt();
           break;
         }
-        case 'finish':
+        case 'finish': {
           phase = 'done';
           sfx.finish();
           view.fx.finish(world.track.finishX, GROUND_Y - 150);
+          const s = world.snapshot;
+          wardrobe.addCoins(s.coinCount);
+
+          const aFirst = achievements.unlock('first_finish');
+          if (aFirst) hud.toast(`🏆 解锁成就【${aFirst.title}】！`);
+
+          if (s.coinCount >= 15) {
+            const aCoin = achievements.unlock('coin_master');
+            if (aCoin) hud.toast(`🏆 解锁成就【${aCoin.title}】！`);
+          }
+          if (usedShieldInRun) {
+            const aShield = achievements.unlock('shield_hero');
+            if (aShield) hud.toast(`🏆 解锁成就【${aShield.title}】！`);
+          }
+          if (streak >= 7) {
+            const aStreak = achievements.unlock('streak_7');
+            if (aStreak) hud.toast(`🏆 解锁成就【${aStreak.title}】！`);
+          }
+
           commitAttempt();
           showResultPanel();
           break;
+        }
       }
     }
   }
@@ -558,7 +655,6 @@ async function boot(): Promise<void> {
   let acc = 0;
   app.ticker.add(() => {
     const now = performance.now();
-    // 手机竖屏或暂停：冻结模拟（不累积时间，恢复无伤继续）
     const blocked = isPortraitPhone();
     rotateOverlay.classList.toggle('show', blocked);
     if (blocked || phase === 'pause') {
@@ -568,56 +664,28 @@ async function boot(): Promise<void> {
     }
     acc += Math.min((now - last) / 1000, 0.25);
     last = now;
-    while (acc >= STEP_S) {
-      acc -= STEP_S;
-      if (phase === 'run') {
-        stepOnce();
-      } else {
-        input.poll(); // 非 run 阶段吞掉输入防堆积
-        if (phase === 'dead' && now >= deadUntil) resetAttempt();
-      }
-    }
-    const snap = world.snapshot;
-    hud.update(snap.timeMs, snap.distanceM, snap.coinCount);
-    view.sync(snap, racerDone ? null : racerWorld.snapshot, now / 1000);
 
-    // ---- 蓄力音状态机（纯表现层，不影响确定性）----
-    if (phase !== 'run') {
-      if (prevCharge > 0) {
-        sfx.chargeEnd(false);
-        prevCharge = 0;
+    if (phase === 'run') {
+      while (acc >= STEP_S) {
+        stepOnce();
+        acc -= STEP_S;
+        if (phase !== 'run') break;
       }
     } else {
-      const ch = snap.charge;
-      if (ch > 0.04 && prevCharge <= 0.04) {
-        sfx.chargeStart();
-      } else if (ch > 0.04) {
-        sfx.chargeUpdate(ch);
+      acc = 0;
+      if (phase === 'dead' && now >= deadUntil) {
+        phase = 'done';
+        showResultPanel();
       }
-      if (ch <= 0.04 && prevCharge > 0.04) {
-        const releasedFull = prevCharge >= 0.98;
-        sfx.chargeEnd(releasedFull);
-        if (releasedFull && snap.alive) {
-          view.addShake(2);
-          view.fx.coin(snap.x, snap.y); // 满蓄松手：金色迸发
-        }
-      }
-      prevCharge = ch;
     }
+
+    const snap = world.snapshot;
+    const ghostSnap = racerDone || !racer.bytes ? null : racerWorld.snapshot;
+    view.sync(snap, ghostSnap, now / 1000);
+    hud.update(snap.timeMs, snap.distanceM, snap.coinCount);
   });
 
   resetAttempt();
-  if (friend) {
-    setTimeout(() => hud.toast(`⚔ 收到 ${friend.name} 的挑战！跑赢 TA 的残影`), 600);
-  }
 }
 
-boot().catch((e: unknown) => {
-  console.error(e);
-  const el = document.getElementById('game');
-  if (el) {
-    el.textContent = `加载失败：${(e as Error)?.message ?? e}`;
-    (el as HTMLElement).style.cssText =
-      'color:#ff8fa3;font:14px/1.6 sans-serif;padding:24px;white-space:pre-wrap;';
-  }
-});
+void boot();

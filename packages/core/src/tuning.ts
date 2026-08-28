@@ -185,6 +185,34 @@ export function isGateActive(g: GateDef, tick: number): boolean {
   return u < g.activeTicks;
 }
 
+// ---------- 新积木（第四批）：重力翻转门 / 护盾之星 / 磁力宝石 ----------
+/** 重力翻转门定义：触碰后改变世界重力方向（1=正向地面，-1=天花板倒挂） */
+export interface PortalDef {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 目标重力方向：1 为朝下（正常地面），-1 为朝上（天花板倒挂） */
+  targetGravDir: 1 | -1;
+}
+
+/** 护盾道具定义：拾取后赋予主角 1 层致死碰撞保护 */
+export interface ShieldDef {
+  x: number;
+  y: number;
+  got: boolean;
+}
+
+/** 磁铁道具定义：拾取后一定时间内自动吸附大范围宝石 */
+export interface MagnetDef {
+  x: number;
+  y: number;
+  got: boolean;
+}
+
+export const MAGNET_DURATION_TICKS = 180; // 3 秒
+export const MAGNET_RADIUS = 150; // 150px 吸附半径
+
 // ---------- 落点宽容（与 world.ts 的支撑判定一致：±0.6R）----------
 export const EDGE_FORGIVE = PLAYER_R * 0.6;
 /** 越过宽为 gap 的坑实际需要的水平位移 */

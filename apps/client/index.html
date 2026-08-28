@@ -64,20 +64,22 @@
         background: #171b26;
         border: 1px solid #2a3040;
         border-radius: 16px;
-        padding: 26px 34px;
+        padding: 24px 30px;
         text-align: center;
-        min-width: 300px;
+        min-width: 310px;
+        max-width: 90vw;
         box-shadow: 0 12px 48px rgba(0,0,0,.5);
       }
       .panel h2 { font-size: 22px; margin-bottom: 12px; }
-      .panel .row { font-size: 16px; margin: 4px 0; color: #aab6cf; }
-      .panel .big { font-size: 30px; color: #ffd23f; margin: 8px 0; font-weight: 700; }
-      .panel .btns { margin-top: 18px; display: flex; gap: 10px; justify-content: center; }
+      .panel .row { font-size: 15px; margin: 4px 0; color: #aab6cf; }
+      .panel .big { font-size: 28px; color: #ffd23f; margin: 8px 0; font-weight: 700; }
+      .panel .btns { margin-top: 16px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
       button {
         pointer-events: auto;
         border: 0; border-radius: 10px;
-        padding: 10px 18px; font-size: 15px; cursor: pointer;
+        padding: 10px 16px; font-size: 14px; cursor: pointer;
         background: #4fc3f7; color: #08222e; font-weight: 600;
+        transition: transform .1s, background .15s;
       }
       button.ghost-btn { background: #2a3040; color: #cfd8ea; }
       button:active { transform: translateY(1px); }
@@ -85,18 +87,27 @@
         position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%);
         background: #222a3a; padding: 8px 16px; border-radius: 999px;
         font-size: 13px; opacity: 0; transition: opacity .3s;
+        border: 1px solid rgba(255,255,255,.1);
       }
       #toast.show { opacity: 1; }
-      /* ---- 榜单面板 ---- */
+      /* ---- 连击浮字 ---- */
+      #combo-tag {
+        position: absolute; left: 50%; top: 40px; transform: translateX(-50%) scale(0.8);
+        font-size: 20px; font-weight: 800; color: #ffd23f;
+        text-shadow: 0 0 12px rgba(255,210,63,.8), 0 2px 4px rgba(0,0,0,.8);
+        opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      #combo-tag.pop { opacity: 1; transform: translateX(-50%) scale(1.15); }
+      /* ---- 榜单 / 衣橱 / 成就列表 ---- */
       .board-list {
         max-height: 46vh; overflow-y: auto;
-        display: flex; flex-direction: column; gap: 4px;
+        display: flex; flex-direction: column; gap: 6px;
         margin: 10px 0 4px; padding-right: 4px;
       }
       .brow {
         display: flex; align-items: center; gap: 10px;
         background: #1e2432; border-radius: 8px;
-        padding: 7px 12px; font-size: 14px;
+        padding: 8px 12px; font-size: 14px;
       }
       .brow .bk { width: 30px; text-align: center; flex-shrink: 0; }
       .brow .bn { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -106,7 +117,33 @@
         background: #ffd23f; color: #4a3608; font-weight: 700;
       }
       .my-line { margin-top: 6px; color: #ffd23f !important; }
-      /* ---- 竖屏旋转提示遮罩 ---- */
+      /* ---- 皮肤卡片 ---- */
+      .skin-grid {
+        display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+        max-height: 46vh; overflow-y: auto; margin: 12px 0;
+      }
+      .skin-card {
+        background: #1e2432; border: 1px solid #2a3448; border-radius: 10px;
+        padding: 12px; text-align: center; cursor: pointer; transition: border .15s, transform .1s;
+      }
+      .skin-card:hover { border-color: #4fc3f7; }
+      .skin-card.active { border-color: #ffd23f; background: #262c3e; box-shadow: 0 0 10px rgba(255,210,63,.2); }
+      .skin-card .s-name { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-bottom: 4px; }
+      .skin-card .s-desc { font-size: 11px; color: #94a3b8; line-height: 1.3; margin-bottom: 8px; }
+      .skin-card .s-btn { font-size: 12px; padding: 4px 10px; width: 100%; }
+      /* ---- 成就卡片 ---- */
+      .ach-list { display: flex; flex-direction: column; gap: 8px; max-height: 48vh; overflow-y: auto; margin: 12px 0; }
+      .ach-item {
+        display: flex; align-items: center; gap: 12px;
+        background: #1e2432; border: 1px solid #2a3448; border-radius: 10px;
+        padding: 10px 14px; text-align: left;
+      }
+      .ach-item.locked { opacity: .45; filter: grayscale(1); }
+      .ach-item .a-icon { font-size: 26px; }
+      .ach-item .a-info { flex: 1; }
+      .ach-item .a-title { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+      .ach-item .a-desc { font-size: 12px; color: #94a3b8; }
+      /* ---- 竖屏提示 ---- */
       #rotate-overlay {
         position: fixed; inset: 0; z-index: 100;
         display: none; flex-direction: column; align-items: center; justify-content: center;
@@ -115,54 +152,36 @@
         color: #e8ecf4; text-align: center;
       }
       #rotate-overlay.show { display: flex; }
-      #rotate-overlay .phone {
-        font-size: 64px;
-        animation: rot 1.6s ease-in-out infinite;
-        filter: drop-shadow(0 6px 16px rgba(0,0,0,.45));
-      }
+      #rotate-overlay .phone { font-size: 64px; animation: rot 1.6s ease-in-out infinite; }
       @keyframes rot { 0%, 25% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
-      #rotate-overlay .t1 { font-size: 20px; font-weight: 700; letter-spacing: .05em; }
+      #rotate-overlay .t1 { font-size: 20px; font-weight: 700; }
       #rotate-overlay .t2 { font-size: 13px; opacity: .7; }
-      /* ---- 暂停顶部提示与按钮 ---- */
+      /* ---- 暂停徽章 ---- */
       #pause-badge {
-        position: absolute;
-        top: calc(10px + env(safe-area-inset-top));
-        left: 50%; transform: translateX(-50%);
+        position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
         display: none; align-items: center; gap: 6px;
-        background: rgba(18,22,34,.85); color: #ffd23f;
-        border: 1px solid rgba(255,210,63,.35);
-        padding: 5px 16px; border-radius: 999px;
-        font-size: 13px; font-weight: 600;
-        letter-spacing: .02em;
-        pointer-events: none;
-        backdrop-filter: blur(4px);
-        box-shadow: 0 4px 16px rgba(0,0,0,.4);
+        background: rgba(18,22,34,.85); color: #ffd23f; border: 1px solid rgba(255,210,63,.35);
+        padding: 5px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
+        pointer-events: none; backdrop-filter: blur(4px);
       }
       #pause-badge.show { display: flex; }
-      #btn-fs, #btn-mute, #btn-pause {
-        display: flex;
-        position: absolute;
-        width: 42px; height: 42px;
+      /* ---- 底部功能按钮 ---- */
+      #btn-fs, #btn-mute, #btn-pause, #btn-wardrobe, #btn-achievements {
+        display: flex; position: absolute;
+        width: 38px; height: 38px;
         align-items: center; justify-content: center;
-        border-radius: 12px;
+        border-radius: 10px;
         background: rgba(30,36,54,.78); color: #cfd8ea;
-        font-size: 19px; pointer-events: auto;
+        font-size: 17px; pointer-events: auto;
         backdrop-filter: blur(6px);
+        z-index: 30;
       }
-      #btn-fs { display: none; }
+      #btn-fs { display: none; right: calc(12px + env(safe-area-inset-right)); bottom: calc(44px + env(safe-area-inset-bottom)); }
       @media (pointer: coarse) { #btn-fs { display: flex; } }
-      #btn-fs {
-        right: calc(12px + env(safe-area-inset-right));
-        bottom: calc(44px + env(safe-area-inset-bottom));
-      }
-      #btn-mute {
-        left: calc(12px + env(safe-area-inset-left));
-        bottom: calc(44px + env(safe-area-inset-bottom));
-      }
-      #btn-pause {
-        left: calc(60px + env(safe-area-inset-left));
-        bottom: calc(44px + env(safe-area-inset-bottom));
-      }
+      #btn-mute { left: calc(12px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
+      #btn-pause { left: calc(56px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
+      #btn-wardrobe { left: calc(100px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
+      #btn-achievements { left: calc(144px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
     </style>
   </head>
   <body>
@@ -174,12 +193,15 @@
         <div class="hud-box" id="hud-meta"></div>
         <div class="hud-box" id="hud-hint">点按小跳 · 按住蓄力跳更高更远 · P 暂停 · R 重开</div>
         <div class="hud-box" id="hud-mode">…</div>
+        <div id="combo-tag">Combo x2!</div>
         <div id="pause-badge">⏸ 画面已定格 · 按 P / 空格继续</div>
         <div id="result"><div class="panel" id="result-panel"></div></div>
         <div id="toast"></div>
         <button id="btn-fs" aria-label="全屏">⛶</button>
         <button id="btn-mute" aria-label="声音开关">🔊</button>
         <button id="btn-pause" aria-label="暂停/继续">⏸</button>
+        <button id="btn-wardrobe" aria-label="外观衣橱">👗</button>
+        <button id="btn-achievements" aria-label="成就荣誉">🏆</button>
       </div>
       <div id="rotate-overlay">
         <div class="phone">📱</div>

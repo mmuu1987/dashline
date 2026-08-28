@@ -56,8 +56,39 @@ export class GameView {
     this.bg.applyTheme(themeId);
   }
 
+  setSkin(skin: import('./wardrobe.js').SkinDef): void {
+    this.player.setSkin(skin);
+  }
+
   setTrack(track: Track): void {
     this.worldView.setTrack(track);
+  }
+
+  onCoin(i: number): void {
+    this.worldView.onCoin(i);
+  }
+
+  onShield(i: number): void {
+    this.worldView.onShield(i);
+  }
+
+  onMagnet(i: number): void {
+    this.worldView.onMagnet(i);
+  }
+
+  onNearMiss(x: number, y: number): void {
+    this.fx.nearmiss(x, y);
+    this.addShake(2.5);
+  }
+
+  onShieldBreak(x: number, y: number): void {
+    this.fx.shieldBreak(x, y);
+    this.addShake(8);
+  }
+
+  onPortal(x: number, y: number, dir: 1 | -1): void {
+    this.fx.portalVortex(x, y, dir);
+    this.addShake(3.5);
   }
 
   getCoinPoint(i: number): { x: number; y: number } | null {

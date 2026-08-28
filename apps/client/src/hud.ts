@@ -1,4 +1,6 @@
 /** HUD：全部 DOM 覆盖层，canvas 之外的一切 UI。 */
+import type { SkinDef } from './wardrobe.js';
+import type { AchievementDef } from './achievements.js';
 
 export interface ResultData {
   finished: boolean;
@@ -18,7 +20,6 @@ export interface BoardRow {
   nickname: string;
   timeMs: number | null;
   score: number;
-  /** 是否拿到了该玩家的输入流（可发起 Ghost 挑战） */
   raceable: boolean;
 }
 
@@ -30,11 +31,23 @@ export class Hud {
   private resultEl = document.getElementById('result')!;
   private panel = document.getElementById('result-panel')!;
   private pauseBadge = document.getElementById('pause-badge')!;
+  private comboTag = document.getElementById('combo-tag')!;
   private toastEl = document.getElementById('toast')!;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  private comboTimer: ReturnType<typeof setTimeout> | null = null;
 
   showPause(show: boolean): void {
     this.pauseBadge.classList.toggle('show', show);
+  }
+
+  showCombo(combo: number): void {
+    if (combo <= 1) return;
+    this.comboTag.textContent = combo >= 5 ? `🔥 Combo x${combo} MAX!` : `✨ Combo x${combo}!`;
+    this.comboTag.classList.remove('pop');
+    void this.comboTag.offsetWidth; // 触发重绘
+    this.comboTag.classList.add('pop');
+    if (this.comboTimer) clearTimeout(this.comboTimer);
+    this.comboTimer = setTimeout(() => this.comboTag.classList.remove('pop'), 800);
   }
 
   update(timeMs: number, distanceM: number, coinCount: number): void {
@@ -88,7 +101,6 @@ export class Hud {
     this.resultEl.classList.add('show');
   }
 
-  /** 今日榜单面板；raceable 的行可发起 Ghost 挑战 */
   showBoard(
     rows: BoardRow[],
     myLine: string | null,
@@ -116,6 +128,67 @@ export class Hud {
       b.onclick = () => onRace(Number(b.dataset.i));
     }
     document.getElementById('btn-bclose')!.onclick = onClose;
+    this.resultEl.classList.add('show');
+  }
+
+  showWardrobe(
+    skins: SkinDef[],
+    totalCoins: number,
+    currentId: string,
+    onAction: (id: string) => void,
+    onClose: () => void,
+  ): void {
+    const cards = skins
+      .map((s) => {
+        const isEquipped = s.id === currentId;
+        const btnText = isEquipped ? '已装备' : s.unlocked ? '装备' : `🪙 ${s.price} 解锁`;
+        const btnClass = isEquipped ? 'ghost-btn' : s.unlocked ? '' : 'race-btn';
+        return `
+          <div class="skin-card ${isEquipped ? 'active' : ''}">
+            <div class="s-name">${s.name}</div>
+            <div class="s-desc">${s.desc}</div>
+            <button class="s-btn ${btnClass}" data-id="${s.id}">${btnText}</button>
+          </div>`;
+      })
+      .join('');
+
+    this.panel.innerHTML = `
+      <h2>👗 外观衣橱</h2>
+      <div class="row" style="color: #ffd23f;">当前资产：🪙 <b>${totalCoins}</b> 宝石</div>
+      <div class="skin-grid">${cards}</div>
+      <div class="btns"><button id="btn-wclose">关闭</button></div>`;
+
+    for (const b of Array.from(this.panel.querySelectorAll<HTMLButtonElement>('.s-btn'))) {
+      b.onclick = () => onAction(b.dataset.id!);
+    }
+    document.getElementById('btn-wclose')!.onclick = onClose;
+    this.resultEl.classList.add('show');
+  }
+
+  showAchievements(list: AchievementDef[], onClose: () => void): void {
+    const items = list
+      .map((a) => {
+        const status = a.unlocked
+          ? `<span style="color:#4ade80;font-size:12px;font-weight:700;">✓ 已达成</span>`
+          : `<span style="color:#94a3b8;font-size:12px;">未解锁</span>`;
+        return `
+          <div class="ach-item ${a.unlocked ? '' : 'locked'}">
+            <div class="a-icon">${a.icon}</div>
+            <div class="a-info">
+              <div class="a-title">${a.title}</div>
+              <div class="a-desc">${a.desc}</div>
+            </div>
+            <div>${status}</div>
+          </div>`;
+      })
+      .join('');
+
+    this.panel.innerHTML = `
+      <h2>🏆 荣誉成就</h2>
+      <div class="ach-list">${items}</div>
+      <div class="btns"><button id="btn-aclose">关闭</button></div>`;
+
+    document.getElementById('btn-aclose')!.onclick = onClose;
     this.resultEl.classList.add('show');
   }
 

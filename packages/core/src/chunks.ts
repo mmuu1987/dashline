@@ -24,13 +24,17 @@ import {
   type MoverDef,
   type PendulumDef,
   type GateDef,
+  type PortalDef,
+  type ShieldDef,
+  type MagnetDef,
 } from './tuning.js';
 
-export type { GateDef } from './tuning.js';
+export type { GateDef, PortalDef, ShieldDef, MagnetDef } from './tuning.js';
 
 /** 世界常量（渲染层也从这里取） */
 export const GROUND_Y = 460; // 地面顶部 y
 export const PIT_Y = 720; // 掉出此深度判死
+export const CEILING_Y = 80; // 天花板倒挂基准 y
 export const TARGET_LEN = 19000; // 目标赛道长度 px（约 53s）
 export const SPIKE_W = 34;
 export const SPIKE_H = 26;
@@ -58,6 +62,8 @@ export interface Plat {
   crumble?: boolean;
   /** 升降平台：顶面 y 按 tick 三角波在 [y-amp, y+amp] 往返 */
   mover?: MoverDef;
+  /** 倒挂支撑板（重力反转时在上方支撑） */
+  inverted?: boolean;
 }
 /** 弹跳菇：贴在地面上的弹射区 */
 export interface Pad {
@@ -83,6 +89,7 @@ export interface WindZone {
   h: number;
   factor: number;
 }
+
 export interface Track {
   grounds: GroundSeg[];
   hazards: Hazard[];
@@ -94,6 +101,9 @@ export interface Track {
   winds: WindZone[];
   pendulums: PendulumDef[];
   gates: GateDef[];
+  portals: PortalDef[];
+  shields: ShieldDef[];
+  magnets: MagnetDef[];
   finishX: number;
   length: number;
 }
@@ -112,6 +122,9 @@ class Builder {
   winds: WindZone[] = [];
   pendulums: PendulumDef[] = [];
   gates: GateDef[] = [];
+  portals: PortalDef[] = [];
+  shields: ShieldDef[] = [];
+  magnets: MagnetDef[] = [];
 
   run(dx: number): void {
     this.cursor += dx;
@@ -119,99 +132,104 @@ class Builder {
 
   /** 挖一个宽 w 的坑（断开当前地面段） */
   gap(w: number): void {
-    this.grounds.push({ x0: this.segStart, x1: this.cursor });
+    if (this.cursor > this.segStart) {
+      this.grounds.push({ x0: this.segStart, x1: this.cursor });
+    }
     this.cursor += w;
     this.segStart = this.cursor;
   }
 
   close(): void {
-    this.grounds.push({ x0: this.segStart, x1: this.cursor });
-  }
-}
-
-function coinRow(b: Builder, r: Rng, y: number, n: number, gapPx = 80, pad = 50): void {
-  for (let i = 0; i < n; i++) {
-    b.coins.push({ x: b.cursor + pad + i * gapPx, y, got: false });
-  }
-}
-
-/** 平地：偶尔摆一排贴地金币 */
-function chFlat(b: Builder, r: Rng): void {
-  const w = rngRange(r, 300, 560);
-  if (r() < 0.55) coinRow(b, r, GROUND_Y - 52, rngInt(r, 3, 5));
-  b.run(w);
-}
-
-/** 坑：宽度按难度分档（= 长按跳距离的比例，见 tuning.ts）；坑上摆三金币弧线指示跳跃路径 */
-function chGap(b: Builder, r: Rng, tier: number): void {
-  b.run(rngRange(r, 70, 150));
-  const gw = gapWidthForTier(tier, r);
-  const gx = b.cursor;
-  const apexY = GROUND_Y - rngRange(r, 95, 135);
-  b.coins.push(
-    { x: gx + gw / 2 - 46, y: GROUND_Y - 72, got: false },
-    { x: gx + gw / 2, y: apexY, got: false },
-    { x: gx + gw / 2 + 46, y: GROUND_Y - 72, got: false },
-  );
-  b.gap(gw);
-  b.run(rngRange(r, 90, 170));
-}
-
-/** 尖刺簇：1~3 连刺，高风险位偶尔悬金币 */
-function chSpike(b: Builder, r: Rng, tier: number): void {
-  const clusters = tier === 0 ? rngInt(r, 1, 2) : rngInt(r, 2, 3);
-  for (let c = 0; c < clusters; c++) {
-    b.run(rngRange(r, 150, 260));
-    const cnt = rngInt(r, 1, Math.min(3, tier + 1));
-    const w = cnt * SPIKE_W;
-    b.hazards.push({ x: b.cursor, y: GROUND_Y - SPIKE_H, w, h: SPIKE_H });
-    if (tier > 0 && r() < 0.4) {
-      b.coins.push({ x: b.cursor + w / 2, y: GROUND_Y - 96, got: false });
+    if (this.cursor > this.segStart) {
+      this.grounds.push({ x0: this.segStart, x1: this.cursor });
     }
-    b.run(w);
   }
 }
 
-/** 浮空台阶：地面安全路线 + 高处金币奖励（风险自选） */
-function chStairs(b: Builder, r: Rng): void {
-  const steps = rngInt(r, 3, 4);
-  let px = b.cursor + rngRange(r, 60, 120);
-  let py = GROUND_Y - 88;
-  for (let i = 0; i < steps; i++) {
-    const w = rngInt(r, 110, 150);
-    b.plats.push({ x: px, y: py, w });
-    b.coins.push({ x: px + w / 2, y: py - 38, got: false });
-    px += w + rngRange(r, 60, 90);
-    py = Math.max(GROUND_Y - 238, py - 56);
+// -------------------------------------------------------------
+// 积木库：每个函数在 b 上追加一段赛道，并把 cursor 前移
+// -------------------------------------------------------------
+
+function chFlat(b: Builder, r: Rng): void {
+  const len = rngRange(r, 420, 720);
+  const coinCnt = rngInt(r, 1, 4);
+  const step = len / (coinCnt + 1);
+  for (let i = 1; i <= coinCnt; i++) {
+    b.coins.push({
+      x: b.cursor + i * step,
+      y: GROUND_Y - rngRange(r, 28, 48),
+      got: false,
+    });
   }
-  b.cursor = Math.max(b.cursor, px) + rngRange(r, 80, 140);
+  b.run(len);
 }
 
-/** 奖励段：三连刺上方一道五币拱弧 */
-function chBonus(b: Builder, r: Rng): void {
-  b.run(rngRange(r, 120, 200));
-  const w = SPIKE_W * 3;
+function chGap(b: Builder, r: Rng, tier: number): void {
+  b.run(rngRange(r, 140, 240));
+  const w = gapWidthForTier(tier, r);
+  const coinX = b.cursor + w / 2;
+  const coinY = GROUND_Y - tapJumpHeight * (0.6 + tier * 0.2);
+  b.coins.push({ x: coinX, y: coinY, got: false });
+  b.gap(w);
+  b.run(rngRange(r, 160, 260));
+}
+
+function chSpike(b: Builder, r: Rng, tier: number): void {
+  b.run(rngRange(r, 160, 240));
+  const cnt = tier === 0 ? 1 : tier === 1 ? 2 : rngInt(r, 2, 3);
+  const w = cnt * SPIKE_W;
   b.hazards.push({ x: b.cursor, y: GROUND_Y - SPIKE_H, w, h: SPIKE_H });
-  const cx = b.cursor + w / 2;
-  for (let i = -2; i <= 2; i++) {
-    b.coins.push({ x: cx + i * 44, y: GROUND_Y - (104 + (2 - Math.abs(i)) * 24), got: false });
-  }
-  b.run(w);
+  const arcH = holdJumpHeight * (0.45 + tier * 0.18);
+  b.coins.push({ x: b.cursor + w / 2, y: GROUND_Y - arcH, got: false });
+  b.cursor += w;
+  b.run(rngRange(r, 160, 240));
 }
 
-/**
- * 弹跳菇大峡谷：超宽坑（两侧各 ~0.72 档坑宽可跳上中央菇岛），
- * 直接飞越在物理上不可能（总宽 > 长按跳距离），必须踩菇弹射过第二段。
- */
+function chStairs(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 140, 200));
+  const steps = rngInt(r, 2, 3);
+  const pw = 120;
+  const ph = 52;
+  const dx = 130;
+  const pitW = (steps + 1) * dx;
+  const startX = b.cursor;
+  b.gap(pitW);
+  for (let i = 0; i < steps; i++) {
+    const px = startX + (i + 0.5) * dx - pw / 2;
+    const py = GROUND_Y - (i + 1) * ph;
+    b.plats.push({ x: px, y: py, w: pw });
+    b.coins.push({ x: px + pw / 2, y: py - 36, got: false });
+  }
+  b.run(rngRange(r, 160, 240));
+}
+
+function chBonus(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 120, 180));
+  const w = gapWidthForTier(0, r);
+  b.hazards.push({ x: b.cursor, y: GROUND_Y - SPIKE_H, w, h: SPIKE_H });
+  const n = 5;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 1) / (n + 1);
+    const cx = b.cursor + t * w;
+    const cy = GROUND_Y - Math.sin(t * Math.PI) * (holdJumpHeight * 0.92);
+    b.coins.push({ x: cx, y: cy, got: false });
+  }
+  b.cursor += w;
+  b.run(rngRange(r, 120, 180));
+}
+
 function chPadPit(b: Builder, r: Rng): void {
-  b.run(rngRange(r, 140, 220));
-  const sideGap = Math.round(holdJumpRange * rngRange(r, 0.62, 0.72)); // 边缘→菇岛：强蓄力可及
-  const islandW = 160;
+  b.run(rngRange(r, 130, 200));
+  const padW = 48;
+  const padX = b.cursor;
+  b.pads.push({ x: padX, w: padW });
+  b.cursor += padW;
+  const pitW = bounceRange * rngRange(r, 0.72, 0.88);
+  const islandW = 100;
+  const sideGap = (pitW - islandW) / 2;
   b.gap(sideGap);
-  // 菇岛是一段普通地面，中央放弹跳区
   const islandX0 = b.cursor;
   b.run(islandW);
-  b.pads.push({ x: islandX0 + 20, w: islandW - 40 });
   b.coins.push(
     { x: islandX0 + islandW / 2, y: GROUND_Y - Math.min(240, bounceHeight * 0.8), got: false },
     { x: islandX0 + islandW / 2 + bounceRange * 0.45, y: GROUND_Y - 110, got: false },
@@ -220,16 +238,12 @@ function chPadPit(b: Builder, r: Rng): void {
   b.run(rngRange(r, 130, 200));
 }
 
-/** 低空刺梁：头顶悬梁 + 地面刺簇 → 只允许"点按短跳"，长按必撞梁（克制无脑蓄力）。
- *  梁底高度按派生量取值：点按顶点擦不过线之上、长按顶点必撞之下。 */
 function chLowBar(b: Builder, r: Rng): void {
   b.run(rngRange(r, 160, 260));
   const spikeCnt = rngInt(r, 1, 2);
   const sw = spikeCnt * SPIKE_W;
   const sx = b.cursor;
-  b.hazards.push({ x: sx, y: GROUND_Y - SPIKE_H, w: sw, h: SPIKE_H }); // 地面刺
-  // 悬梁：底面高度 = 点按跳顶点 + 碰撞半径 + 44px 安全缝
-  // （点按/极短按从梁下穿过；中长按开始撞梁；满蓄力必撞）
+  b.hazards.push({ x: sx, y: GROUND_Y - SPIKE_H, w: sw, h: SPIKE_H });
   const barBottom = GROUND_Y - (tapJumpHeight + PLAYER_R * 0.8 + 44);
   const barW = sw + 150;
   b.hazards.push({ x: sx - 75, y: barBottom - SPIKE_H, w: barW, h: SPIKE_H });
@@ -238,7 +252,6 @@ function chLowBar(b: Builder, r: Rng): void {
   b.run(rngRange(r, 130, 190));
 }
 
-/** 碎裂桥：全坑铺三块碎裂板，踩上即开始倒计时 —— 保持节奏别停留。 */
 function chCrumble(b: Builder, r: Rng): void {
   b.run(rngRange(r, 130, 210));
   const plankW = 115;
@@ -246,158 +259,149 @@ function chCrumble(b: Builder, r: Rng): void {
   const n = 3;
   const total = n * plankW + (n - 1) * plankGap;
   const pitX = b.cursor;
-  b.gap(total + 30); // 前后各留一点余量
+  b.gap(total + 30);
   for (let i = 0; i < n; i++) {
     const px = pitX + 15 + i * (plankW + plankGap);
-    b.plats.push({ x: px, y: GROUND_Y, w: plankW, crumble: true });
-    b.coins.push({ x: px + plankW / 2, y: GROUND_Y - 46, got: false });
+    const py = GROUND_Y - 24;
+    b.plats.push({ x: px, y: py, w: plankW, crumble: true });
+    b.coins.push({ x: px + plankW / 2, y: py - 36, got: false });
   }
-  b.run(rngRange(r, 140, 200));
+  b.run(rngRange(r, 140, 220));
 }
 
-/** 升降电梯：刺毯上方一座三角波升降台 —— 乘坐稳过，或点按连跳硬闯（双路线）。 */
 function chElevator(b: Builder, r: Rng): void {
   b.run(rngRange(r, 140, 220));
-  const sw = SPIKE_W * rngInt(r, 6, 8); // 204~272px 刺毯
-  const sx = b.cursor;
-  b.hazards.push({ x: sx, y: GROUND_Y - SPIKE_H, w: sw, h: SPIKE_H });
-  const mw = 150;
-  // 低点 top=GROUND_Y-54（板底距刺尖 6px+），高点 top=GROUND_Y-114
-  b.plats.push({
-    x: sx + sw / 2 - mw / 2,
-    y: GROUND_Y - 84,
-    w: mw,
-    mover: { amp: 30, periodTicks: 144, phase: Math.round(rngRange(r, 0, 143)) },
-  });
-  // 高处宝石：只有乘到高点再起跳才够得着
+  const pw = 130;
+  const pitW = 340;
+  const pitX = b.cursor;
+  b.gap(pitW);
+  const mover: MoverDef = {
+    amp: 44,
+    periodTicks: rngInt(r, 80, 120),
+    phase: rngInt(r, 0, 120),
+  };
+  const platX = pitX + (pitW - pw) / 2;
+  const basePy = GROUND_Y - 60;
+  b.plats.push({ x: platX, y: basePy, w: pw, mover });
   b.coins.push(
-    { x: sx + sw / 2 - 40, y: GROUND_Y - 176, got: false },
-    { x: sx + sw / 2, y: GROUND_Y - 198, got: false },
-    { x: sx + sw / 2 + 40, y: GROUND_Y - 176, got: false },
+    { x: platX + pw / 2, y: basePy - mover.amp - 36, got: false },
+    { x: platX + pw / 2, y: basePy + mover.amp - 36, got: false },
   );
-  b.cursor += sw;
-  b.run(rngRange(r, 140, 200));
-}
-
-/** 加速带冲刺：踩带提速 → 冲上超远坑（无加速在物理上不可能越过）。 */
-function chBoost(b: Builder, r: Rng): void {
   b.run(rngRange(r, 150, 230));
-  const zw = 130;
-  b.boosts.push({ x: b.cursor, w: zw });
-  b.run(zw);
-  b.run(rngRange(r, 60, 100)); // 起跳助跑（加速仍在持续）
-  const gw = Math.round(boostRange * rngRange(r, 0.78, 0.88)); // > 满蓄力射程
-  const gx = b.cursor;
-  const apexY = GROUND_Y - rngRange(r, 150, 190);
-  b.coins.push(
-    { x: gx + gw * 0.3, y: GROUND_Y - 90, got: false },
-    { x: gx + gw * 0.55, y: apexY, got: false },
-    { x: gx + gw * 0.8, y: GROUND_Y - 90, got: false },
-  );
-  b.gap(gw);
-  b.run(rngRange(r, 120, 180));
 }
 
-/** 二段跳环：超宽坑（>满蓄力射程），沿低空坠落走廊铺"阶梯环带"
- *  （四枚、高度150→84、捕获窗两两衔接）—— 无论起跳早晚弧线必扫中一枚，
- *  拾取点已接近坠线、剩程极短，二段跳轻松登岸。 */
-function chRing(b: Builder, r: Rng): void {
-  b.run(rngRange(r, 150, 220));
-  const W = Math.round(holdJumpRange * rngRange(r, 1.22, 1.38)); // 单跳必死
-  const gx = b.cursor;
-  b.gap(W);
-  const hs = [150, 128, 106, 84]; // 距地高度（低位走廊）
-  const fr = [0.5, 0.62, 0.74, 0.85];
-  for (let i = 0; i < 4; i++) {
-    b.rings.push({ x: gx + W * fr[i]!, y: GROUND_Y - hs[i]!, got: false });
+function chBoost(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 130, 200));
+  const bw = 170;
+  b.boosts.push({ x: b.cursor, w: bw });
+  b.cursor += bw;
+  b.run(rngRange(r, 100, 160));
+  const pitW = boostRange * rngRange(r, 0.62, 0.76);
+  const n = 5;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 1) / (n + 1);
+    const cx = b.cursor + t * pitW;
+    const cy = GROUND_Y - Math.sin(t * Math.PI) * (holdJumpHeight * 1.35);
+    b.coins.push({ x: cx, y: cy, got: false });
   }
-  b.coins.push({ x: gx + W * 0.93, y: GROUND_Y - 92, got: false });
-  b.run(rngRange(r, 140, 200));
+  b.gap(pitW);
+  b.run(rngRange(r, 160, 240));
 }
 
-/** 上升气流柱：超宽坑上方整片减重区 —— 满蓄力一跃冲天，扶摇直上吃高空宝石；
- *  飞出柱顶即恢复正常重力抛物线落向对岸。 */
-function chUpdraft(b: Builder, r: Rng): void {
+function chRing(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 130, 200));
+  const pitW = holdJumpRange * 1.45;
+  const startX = b.cursor;
+  b.gap(pitW);
+  const ringX = startX + holdJumpRange * 0.72;
+  const ringY = GROUND_Y - holdJumpHeight * 0.55;
+  b.rings.push({ x: ringX, y: ringY, got: false });
+  b.coins.push(
+    { x: ringX, y: ringY, got: false },
+    { x: ringX + 130, y: ringY - 55, got: false },
+    { x: ringX + 260, y: ringY, got: false },
+  );
   b.run(rngRange(r, 150, 220));
-  // 1.15~1.28 倍射程，配合 80px 对岸平台，确保起跳与落点窗口充裕
-  const W = Math.round(holdJumpRange * rngRange(r, 1.15, 1.28));
-  const gx = b.cursor;
-  b.gap(W - 80); // 对岸搁板：多给 80px 落点容错
-  b.run(80);
-  // 柱体覆盖全坑并向两侧各探出 50px
-  const h = 240;
+}
+
+function chUpdraft(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 130, 200));
+  const pitW = 440;
+  const pitX = b.cursor;
+  b.gap(pitW);
+  const wzX = pitX + 40;
+  const wzW = 180;
+  const wzH = 260;
   b.winds.push({
-    x: gx - 50,
-    w: W + 100,
-    h,
+    x: wzX,
+    w: wzW,
+    h: wzH,
     factor: UPDRAFT_G_FACTOR,
   });
-  // 高空宝石阶梯：贴着柱内攀升路线摆放
-  b.coins.push(
-    { x: gx + W * 0.25, y: GROUND_Y - 130, got: false },
-    { x: gx + W * 0.5, y: GROUND_Y - 200, got: false },
-    { x: gx + W * 0.72, y: GROUND_Y - 160, got: false },
-  );
-  b.run(rngRange(r, 140, 200));
+  const shelfX = wzX + wzW + 20;
+  const shelfW = 80;
+  const shelfY = GROUND_Y - 45;
+  b.plats.push({ x: shelfX, y: shelfY, w: shelfW });
+  for (let i = 0; i < 4; i++) {
+    b.coins.push({
+      x: wzX + 25 + i * 40,
+      y: GROUND_Y - 70 - i * 42,
+      got: false,
+    });
+  }
+  b.run(rngRange(r, 150, 220));
 }
 
-/** 横扫钉球：铁链吊球沿走廊横扫、两端下沉封路 —— 掐准它抬升回中的窗口冲刺。 */
 function chPendulum(b: Builder, r: Rng): void {
-  b.run(rngRange(r, 160, 240));
-  const CW = 230; // 走廊宽
-  const startX = b.cursor;
-  b.pendulums.push({
-    x0: startX + 26,
-    x1: startX + CW - 26,
-    highY: GROUND_Y - 118,
-    lowY: GROUND_Y - 36,
+  b.run(rngRange(r, 140, 220));
+  const span = 220;
+  const px0 = b.cursor + 40;
+  const px1 = px0 + span;
+  const pd: PendulumDef = {
+    x0: px0,
+    x1: px1,
+    highY: GROUND_Y - 85,
+    lowY: GROUND_Y - 24,
     r: PENDULUM_R,
-    periodTicks: Math.round(rngRange(r, 150, 190)),
-    phase: Math.round(rngRange(r, 0, 149)),
-  });
+    periodTicks: rngInt(r, 90, 130),
+    phase: rngInt(r, 0, 130),
+  };
+  b.pendulums.push(pd);
   b.coins.push(
-    { x: startX + CW * 0.32, y: GROUND_Y - 62, got: false },
-    { x: startX + CW * 0.5, y: GROUND_Y - 70, got: false },
-    { x: startX + CW * 0.68, y: GROUND_Y - 62, got: false },
+    { x: px0 + span * 0.25, y: GROUND_Y - 45, got: false },
+    { x: (px0 + px1) / 2, y: GROUND_Y - 45, got: false },
+    { x: px0 + span * 0.75, y: GROUND_Y - 45, got: false },
   );
-  b.run(CW);
-  b.run(rngRange(r, 140, 200));
+  b.run(span + 140);
+  b.run(rngRange(r, 130, 200));
 }
 
-/** 激光闸门：地面垂直高能激光，周期性通电与关闭。
- *  掐准断电窗口冲刺穿过，或起跳飞跃顶端吃高空金币。 */
 function chGate(b: Builder, r: Rng): void {
-  b.run(rngRange(r, 150, 240));
-  const gx = b.cursor;
-  const gateH = 80;
-  const period = Math.round(rngRange(r, 130, 170));
-  const active = Math.round(period * rngRange(r, 0.42, 0.50));
-  const phase = Math.round(rngRange(r, 0, period - 1));
-  b.gates.push({
-    x: gx + 40,
+  b.run(rngRange(r, 150, 230));
+  const gateX = b.cursor + 60;
+  const gateW = 24;
+  const gateH = 135;
+  const g: GateDef = {
+    x: gateX,
     y: GROUND_Y - gateH,
-    w: 16,
+    w: gateW,
     h: gateH,
-    periodTicks: period,
-    activeTicks: active,
-    phase,
-  });
-  // 高处宝石（飞跃路线）与低处穿行宝石
-  b.coins.push(
-    { x: gx + 48, y: GROUND_Y - gateH - 35, got: false },
-    { x: gx + 110, y: GROUND_Y - 48, got: false },
-  );
+    periodTicks: rngInt(r, 110, 150),
+    activeTicks: 55,
+    phase: rngInt(r, 0, 150),
+  };
+  b.gates.push(g);
+  b.coins.push({ x: gateX + gateW / 2, y: GROUND_Y - 40, got: false });
   b.run(160);
   b.run(rngRange(r, 120, 180));
 }
 
-/** 碎裂天梯：三层碎裂板逐级攀升，踩板即倒计时 —— 一路小跳别回头，顶端高币犒赏节奏大师。 */
 function chCrumbleStairs(b: Builder, r: Rng): void {
   b.run(rngRange(r, 130, 200));
   const plankW = 118;
   const gapX = 78;
   const n = 3;
-  const tailDrop = 130; // 第三块板后到对岸的空隙
+  const tailDrop = 130;
   const total = n * plankW + (n - 1) * gapX + tailDrop;
   const pitX = b.cursor;
   b.gap(total);
@@ -408,6 +412,97 @@ function chCrumbleStairs(b: Builder, r: Rng): void {
     b.plats.push({ x: px, y: py, w: plankW, crumble: true });
     b.coins.push({ x: px + plankW / 2, y: py - 40, got: false });
   }
+  b.run(rngRange(r, 140, 200));
+}
+
+/** 重力反转门：穿过入口门颠倒重力飞上天花板，在上方避开深渊，再穿过出口门回落地面 */
+function chGravityPortal(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 140, 200));
+  const inX = b.cursor + 40;
+  b.portals.push({
+    x: inX,
+    y: GROUND_Y - 95,
+    w: 36,
+    h: 95,
+    targetGravDir: -1,
+  });
+  b.run(80);
+
+  const spanW = 580;
+  const pitX = b.cursor;
+  b.gap(spanW); // 地面是无法跨越的深渊
+
+  // 天花板悬空跑道
+  const ceilPlatW = 520;
+  b.plats.push({
+    x: pitX + 30,
+    y: CEILING_Y + PLAYER_R,
+    w: ceilPlatW,
+    inverted: true,
+  });
+
+  // 天花板上的金币列
+  for (let i = 0; i < 5; i++) {
+    b.coins.push({
+      x: pitX + 80 + i * 85,
+      y: CEILING_Y + 42,
+      got: false,
+    });
+  }
+
+  // 出口门（将重力翻转回地面）
+  const outX = pitX + ceilPlatW - 10;
+  b.portals.push({
+    x: outX,
+    y: CEILING_Y,
+    w: 36,
+    h: 95,
+    targetGravDir: 1,
+  });
+
+  b.run(rngRange(r, 160, 240));
+}
+
+/** 护盾之星挑战：拾取护盾星，获得 1 层无敌抵扣 */
+function chShieldChallenge(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 140, 200));
+  b.shields.push({
+    x: b.cursor + 40,
+    y: GROUND_Y - 60,
+    got: false,
+  });
+  b.run(140);
+
+  // 放置密集地刺与高额金币犒赏
+  const sw = 2 * SPIKE_W;
+  b.hazards.push({ x: b.cursor, y: GROUND_Y - SPIKE_H, w: sw, h: SPIKE_H });
+  b.coins.push(
+    { x: b.cursor + sw / 2, y: GROUND_Y - 95, got: false },
+    { x: b.cursor + sw / 2 + 50, y: GROUND_Y - 95, got: false },
+  );
+  b.cursor += sw;
+  b.run(rngRange(r, 150, 220));
+}
+
+/** 磁力宝石狂欢：拾取磁铁后，大范围宝石彩虹拱门被自动吸附 */
+function chMagnetRun(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 140, 200));
+  b.magnets.push({
+    x: b.cursor + 40,
+    y: GROUND_Y - 50,
+    got: false,
+  });
+  b.run(120);
+
+  // 彩虹弧度金币阵（玩家无需跳跃也能被磁铁吸附）
+  const span = 420;
+  for (let i = 0; i < 7; i++) {
+    const t = (i + 1) / 8;
+    const cx = b.cursor + t * span;
+    const cy = GROUND_Y - 65 - Math.sin(t * Math.PI) * 110;
+    b.coins.push({ x: cx, y: cy, got: false });
+  }
+  b.run(span);
   b.run(rngRange(r, 140, 200));
 }
 
@@ -430,27 +525,30 @@ type ChunkName =
   | 'updraft'
   | 'pendulum'
   | 'crumblestairs'
-  | 'gate';
+  | 'gate'
+  | 'gravityportal'
+  | 'shield'
+  | 'magnet';
 
 function pickChunk(b: Builder, r: Rng): void {
-  const names: ChunkName[] = ['flat', 'flat', 'gap0', 'spike0', 'stairs'];
-  const weights = [3, 3, 2, 2, 2];
+  const names: ChunkName[] = ['flat', 'gap0', 'spike0', 'stairs', 'bonus'];
+  const weights = [2, 2, 3, 2, 2];
   const p = b.cursor / TARGET_LEN;
-  if (p >= 0.22) {
-    names.push('gap1', 'spike1', 'stairs', 'bonus', 'lowbar');
-    weights.push(2, 2, 2, 1, 2);
+  if (p >= 0.2) {
+    names.push('gap1', 'spike1', 'lowbar', 'shield', 'magnet');
+    weights.push(2, 3, 3, 1, 1);
   }
   if (p >= 0.35) {
-    names.push('padpit', 'crumble', 'elevator', 'updraft');
-    weights.push(1, 2, 2, 2);
+    names.push('padpit', 'crumble', 'elevator', 'updraft', 'gravityportal');
+    weights.push(2, 2, 2, 2, 2);
   }
   if (p >= 0.45) {
     names.push('crumblestairs', 'gate');
-    weights.push(1, 2);
+    weights.push(2, 2);
   }
   if (p >= 0.55) {
     names.push('gap2', 'spike2', 'boost', 'ring', 'pendulum');
-    weights.push(2, 2, 2, 2, 2);
+    weights.push(2, 3, 2, 2, 2);
   }
   const name = names[rngPickWeighted(r, weights)]!;
   switch (name) {
@@ -492,6 +590,12 @@ function pickChunk(b: Builder, r: Rng): void {
       return chCrumbleStairs(b, r);
     case 'gate':
       return chGate(b, r);
+    case 'gravityportal':
+      return chGravityPortal(b, r);
+    case 'shield':
+      return chShieldChallenge(b, r);
+    case 'magnet':
+      return chMagnetRun(b, r);
   }
 }
 
@@ -515,6 +619,9 @@ export function buildTrack(seed: bigint): Track {
     winds: b.winds.sort((a, z) => a.x - z.x),
     pendulums: b.pendulums.sort((a, z) => a.x0 - z.x0),
     gates: b.gates.sort((a, z) => a.x - z.x),
+    portals: b.portals.sort((a, z) => a.x - z.x),
+    shields: b.shields.sort((a, z) => a.x - z.x),
+    magnets: b.magnets.sort((a, z) => a.x - z.x),
     finishX,
     length: b.cursor,
   };

@@ -117,6 +117,39 @@ export class Particles {
     }
   }
 
+  /** 极限擦刺：高能金色与白光火花迸发 */
+  nearmiss(x: number, y: number): void {
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.5;
+      const sp = 140 + Math.random() * 180;
+      this.spawn(i % 2 === 0 ? 'sparkle' : 'goldDot', 0xffea00, x, y,
+        Math.cos(a) * sp, Math.sin(a) * sp - 30,
+        { g: 300, life: 0.4 + Math.random() * 0.2, scale: 0.22 + Math.random() * 0.15, add: true, shrink: true });
+    }
+  }
+
+  /** 护盾碎裂：青蓝水晶碎屑四散 */
+  shieldBreak(x: number, y: number): void {
+    for (let i = 0; i < 18; i++) {
+      const a = (Math.PI * 2 * i) / 18 + Math.random() * 0.3;
+      const sp = 160 + Math.random() * 220;
+      this.spawn('sparkle', [0x38bdf8, 0xe0f2fe, 0x0284c7][i % 3]!, x, y,
+        Math.cos(a) * sp, Math.sin(a) * sp,
+        { g: 380, life: 0.6 + Math.random() * 0.3, scale: 0.25 + Math.random() * 0.2, add: true, shrink: true });
+    }
+  }
+
+  /** 重力翻转能量漩涡 */
+  portalVortex(x: number, y: number, dir: 1 | -1): void {
+    for (let i = 0; i < 14; i++) {
+      const a = (Math.PI * 2 * i) / 14;
+      const sp = 100 + Math.random() * 140;
+      this.spawn('sparkle', dir === -1 ? 0xc084fc : 0x38bdf8, x, y,
+        Math.cos(a) * sp, Math.sin(a) * sp + dir * 60,
+        { g: 180 * dir, life: 0.5 + Math.random() * 0.25, scale: 0.2 + Math.random() * 0.15, add: true, shrink: true });
+    }
+  }
+
   /** 跑动尾尘（小）*/
   runDust(x: number, y: number): void {
     this.spawn('whiteDot', 0xbfb49c, x, y,

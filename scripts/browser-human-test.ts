@@ -112,53 +112,48 @@ async function runHumanTest(): Promise<void> {
     // 截图 1: 奔跑中
     const runPicPath = path.join(SCREENSHOT_DIR, 'human_test_01_running.png');
     await page.screenshot({ path: runPicPath });
-    console.log(`✓ 截图已保存: ${runPicPath}`);
-
-    // 等待发生撞毁/结算并抓取机关
-    await page.waitForTimeout(1200);
+    // 等待自然落地并发生撞毁/结算
+    await page.waitForTimeout(3500);
 
     // 截图 2: 撞毁结算
     const crashPicPath = path.join(SCREENSHOT_DIR, 'human_test_02_crash.png');
     await page.screenshot({ path: crashPicPath });
     console.log(`✓ 截图已保存: ${crashPicPath}`);
 
-    // 5. 第二局：模拟真人点击"再跑一次"
-    console.log('[5/7] 模拟真人点击结算面板 [再跑一次] 按钮...');
-    const retryBtn = page.locator('#btn-retry');
-    if (await retryBtn.isVisible()) {
-      await retryBtn.click();
-    } else {
-      await page.keyboard.press('KeyR');
-    }
+    // 5. 第二局：模拟真人按 R 键重开
+    console.log('[5/9] 模拟真人按 [R] 键快速重开...');
+    await page.keyboard.press('KeyR');
     await page.waitForTimeout(500);
 
     const round2Meta = await page.locator('#hud-meta').innerText();
     console.log(`✓ 重开成功，当前 HUD: "${round2Meta.replace(/\n/g, ' | ')}"`);
 
-    // 6. 交互测试：查看排行榜弹窗
-    console.log('[6/7] 模拟真人打开 [今日榜单] 弹窗...');
-    // 故意再撞一次触发结算以点榜单
-    await page.waitForTimeout(1200);
-    const boardBtn = page.locator('#btn-board');
-    if (await boardBtn.isVisible()) {
-      await boardBtn.click();
-      await page.waitForTimeout(800);
+    // 6. 交互测试：查看外观衣橱弹窗
+    console.log('[6/9] 模拟真人点击 [外观衣橱] 按钮...');
+    const wardrobeBtn = page.locator('#btn-wardrobe');
+    await wardrobeBtn.click();
+    await page.waitForTimeout(400);
 
-      const boardListText = await page.locator('.board-list').innerText();
-      console.log(`  -> 榜单展示数据预览:\n${boardListText}`);
+    const skinPicPath = path.join(SCREENSHOT_DIR, 'human_test_05_wardrobe.png');
+    await page.screenshot({ path: skinPicPath });
+    console.log(`✓ 衣橱面板截图已保存: ${skinPicPath}`);
+    await page.click('#btn-wclose', { force: true });
+    await page.waitForTimeout(300);
 
-      // 截图 3: 榜单弹窗
-      const boardPicPath = path.join(SCREENSHOT_DIR, 'human_test_03_board.png');
-      await page.screenshot({ path: boardPicPath });
-      console.log(`✓ 截图已保存: ${boardPicPath}`);
+    // 7. 交互测试：查看荣誉成就弹窗
+    console.log('[7/9] 模拟真人点击 [荣誉成就] 按钮...');
+    const achBtn = page.locator('#btn-achievements');
+    await achBtn.click();
+    await page.waitForTimeout(400);
 
-      // 点击关闭
-      await page.locator('#btn-bclose').click();
-      await page.waitForTimeout(400);
-    }
+    const achPicPath = path.join(SCREENSHOT_DIR, 'human_test_06_achievements.png');
+    await page.screenshot({ path: achPicPath });
+    console.log(`✓ 成就面板截图已保存: ${achPicPath}`);
+    await page.click('#btn-aclose', { force: true });
+    await page.waitForTimeout(300);
 
-    // 7. 纯净无遮挡定格暂停测试
-    console.log('[7/8] 模拟真人点击暂停按钮与按 P 键暂停...');
+    // 8. 交互测试：纯净定格暂停
+    console.log('[8/9] 模拟真人点击暂停按钮与按 P 键暂停...');
     const pauseBtn = page.locator('#btn-pause');
     await pauseBtn.click();
     await page.waitForTimeout(300);
@@ -171,19 +166,19 @@ async function runHumanTest(): Promise<void> {
     await page.screenshot({ path: pausePicPath });
     console.log(`✓ 纯净定格截图已保存: ${pausePicPath}`);
 
-    // 再次点击暂停按钮（或按 P）继续
+    // 恢复运行
     await pauseBtn.click();
     await page.waitForTimeout(300);
     console.log('✓ 恢复游戏运行');
 
-    // 8. 音频控件交互测试
-    console.log('[8/8] 模拟真人点击静音切换按钮...');
+    // 9. 交互测试：音频开关
+    console.log('[9/9] 模拟真人点击静音切换按钮...');
     const muteBtn = page.locator('#btn-mute');
     const initMute = await muteBtn.innerText();
     await muteBtn.click();
     const afterMute = await muteBtn.innerText();
     console.log(`✓ 静音状态切换: ${initMute} -> ${afterMute}`);
-    await muteBtn.click(); // 恢复
+    await muteBtn.click();
 
     console.log('\n========================================');
     console.log('🎉 真人式浏览器 E2E 自动化测试全流程 100% 成功！');

@@ -10,20 +10,46 @@ import {
   BUFFER_TICKS,
   COYOTE_TICKS,
   HOLD_MAX_TICKS,
-  IN_DOWN_HELD,
   IN_JUMP_HELD,
   IN_JUMP_PRESS,
   STEP_S,
   TICK_RATE,
 } from '@dashline/shared';
-import { GROUND_Y, PIT_Y, buildTrack, type Plat, type Track, type WindZone, type GateDef } from './chunks.js';
+import {
+  GROUND_Y,
+  PIT_Y,
+  CEILING_Y,
+  buildTrack,
+  type Plat,
+  type Track,
+  type WindZone,
+  type GateDef,
+  type PortalDef,
+  type ShieldDef,
+  type MagnetDef,
+} from './chunks.js';
 
-export { GROUND_Y, PIT_Y } from './chunks.js';
-export type { Track, GroundSeg, Hazard, Coin, Plat, Pad, GateDef } from './chunks.js';
-export { PLAYER_R, CRUMBLE_TICKS, bounceV, PENDULUM_R, isGateActive } from './tuning.js';
+export { GROUND_Y, PIT_Y, CEILING_Y } from './chunks.js';
+export type { Track, GroundSeg, Hazard, Coin, Plat, Pad, GateDef, PortalDef, ShieldDef, MagnetDef } from './chunks.js';
+export { PLAYER_R, CRUMBLE_TICKS, bounceV, PENDULUM_R, isGateActive, MAGNET_DURATION_TICKS, MAGNET_RADIUS } from './tuning.js';
 export { TUNING, tapJumpHeight, holdJumpHeight, pendulumBob } from './tuning.js';
 
-import { PLAYER_R, TUNING, CRUMBLE_TICKS, bounceV, BOOST_FACTOR, BOOST_TICKS, djumpV, moverOffsetY, UPDRAFT_G_FACTOR, PENDULUM_R, pendulumBob, isGateActive } from './tuning.js';
+import {
+  PLAYER_R,
+  TUNING,
+  CRUMBLE_TICKS,
+  bounceV,
+  BOOST_FACTOR,
+  BOOST_TICKS,
+  djumpV,
+  moverOffsetY,
+  UPDRAFT_G_FACTOR,
+  PENDULUM_R,
+  pendulumBob,
+  isGateActive,
+  MAGNET_DURATION_TICKS,
+  MAGNET_RADIUS,
+} from './tuning.js';
 
 export const START_X = 80;
 export const START_Y = GROUND_Y - PLAYER_R;
@@ -31,13 +57,18 @@ export const START_Y = GROUND_Y - PLAYER_R;
 export type SimEvent =
   | { type: 'jump' }
   | { type: 'land' }
-  | { type: 'coin'; index: number }
+  | { type: 'coin'; index: number; combo: number }
   | { type: 'crash'; cause: 'spike' | 'pit' | 'ball' | 'laser' }
   | { type: 'bounce' }
   | { type: 'crumble'; index: number }
   | { type: 'ring'; index: number }
   | { type: 'djump' }
   | { type: 'boost' }
+  | { type: 'portal'; dir: 1 | -1 }
+  | { type: 'shield' }
+  | { type: 'shieldBreak' }
+  | { type: 'magnet' }
+  | { type: 'nearmiss'; x: number; y: number }
   | { type: 'finish' };
 
 export interface WorldSnapshot {
@@ -62,6 +93,14 @@ export interface WorldSnapshot {
   airJumps: number;
   /** 蓄力进度 0~1（长按上升段），0 = 未在蓄力。渲染层画蓄力环用 */
   charge: number;
+  /** 重力方向：1=正常地面，-1=天花板倒挂 */
+  gravDir: 1 | -1;
+  /** 是否拥有护盾 */
+  hasShield: boolean;
+  /** 磁铁剩余时间比例 0~1 */
+  magnetLeft: number;
+  /** 当前连击数 */
+  combo: number;
 }
 
 const FINISH_BASE_SCORE = 10_000_000;
@@ -104,9 +143,19 @@ export class World {
   private platHp: number[] = [];
   private _airJumps = 0;
   private _boostLeft = 0;
-  /** 动态收集态全部收敛到 world 内部账本（track 对象保持只读共享，杜绝 clone 污染） */
+  private _gravDir: 1 | -1 = 1;
+  private _hasShield = false;
+  private _shieldInvulTicks = 0;
+  private _magnetTicks = 0;
+  private _lastCoinTick = -999;
+  private _coinCombo = 0;
+
+  /** 动态收集态收敛到内部账本（track 对象只读共享） */
   private _coinsGotIdx = new Set<number>();
   private _ringsGotIdx = new Set<number>();
+  private _shieldsGotIdx = new Set<number>();
+  private _magnetsGotIdx = new Set<number>();
+  private _nearMissHazards = new Set<number>();
   private evq: SimEvent[] = [];
 
   constructor(seed: bigint, track?: Track) {
@@ -141,6 +190,10 @@ export class World {
       boost: this._boostLeft > 0 ? this._boostLeft / BOOST_TICKS : 0,
       airJumps: this._airJumps,
       charge: !this._grounded && this.holding ? Math.min(1, this.holdTicks / HOLD_MAX_TICKS) : 0,
+      gravDir: this._gravDir,
+      hasShield: this._hasShield,
+      magnetLeft: this._magnetTicks > 0 ? this._magnetTicks / MAGNET_DURATION_TICKS : 0,
+      combo: this._coinCombo,
     };
   }
 
@@ -151,8 +204,6 @@ export class World {
     return out;
   }
 
-  /** 深拷贝世界状态（track 只读共享；coins 的 got 标记共享但不影响物理确定性）。
-   *  用途：AI 决策 / 提示系统 / 服务端批量重放。 */
   clone(): World {
     const c = Object.create(World.prototype) as World;
     c.seed = this.seed;
@@ -173,22 +224,32 @@ export class World {
     c.platHp = this.platHp.slice();
     c._airJumps = this._airJumps;
     c._boostLeft = this._boostLeft;
+    c._gravDir = this._gravDir;
+    c._hasShield = this._hasShield;
+    c._shieldInvulTicks = this._shieldInvulTicks;
+    c._magnetTicks = this._magnetTicks;
+    c._lastCoinTick = this._lastCoinTick;
+    c._coinCombo = this._coinCombo;
     c._coinsGotIdx = new Set(this._coinsGotIdx);
     c._ringsGotIdx = new Set(this._ringsGotIdx);
+    c._shieldsGotIdx = new Set(this._shieldsGotIdx);
+    c._magnetsGotIdx = new Set(this._magnetsGotIdx);
+    c._nearMissHazards = new Set(this._nearMissHazards);
     c.evq = [];
     return c;
   }
 
-  /** 推进一个逻辑 tick。input 为该 tick 的输入位掩码字节。 */
   step(input: number): void {
     if (!this._alive || this._finished) return;
     this.tick++;
     if (this._boostLeft > 0) this._boostLeft--;
-    // 土狼时间逐 tick 衰减（修复：此前从未递减，导致离边后无限期可起跳、
-    // 空中误触满血跳、二段跳环分支永不生效 —— core.5 回归根因）
+    if (this._shieldInvulTicks > 0) this._shieldInvulTicks--;
+    if (this._magnetTicks > 0) this._magnetTicks--;
+    if (this.tick - this._lastCoinTick > 48) this._coinCombo = 0; // ~0.8s 连击重置
+
     if (!this._grounded && this.coyote > 0) this.coyote--;
 
-    // ---- 碎裂板倒计时（触发后持续计时，离开也不暂停）----
+    // 碎裂板倒计时
     for (let i = 0; i < this.platHp.length; i++) {
       const hp = this.platHp[i]!;
       if (hp > 0) {
@@ -198,11 +259,11 @@ export class World {
       }
     }
 
-    // ---- 输入缓冲 ----
+    // 输入缓冲与起跳
     if ((input & IN_JUMP_PRESS) !== 0) this.buffer = BUFFER_TICKS;
-    // ---- 起跳判定（含土狼时间）----
+    const jumpDir = -this._gravDir; // 正向重力向上跳 (vy<0)，反向重力向下跳 (vy>0)
     if (this.buffer > 0 && (this._grounded || this.coyote > 0)) {
-      this._vy = -TUNING.jumpV;
+      this._vy = jumpDir * TUNING.jumpV;
       this._grounded = false;
       this.holding = true;
       this.holdTicks = 0;
@@ -215,8 +276,7 @@ export class World {
       this.coyote <= 0 &&
       this._airJumps > 0
     ) {
-      // ---- 空中二段跳（环授予；不占用地面预输入缓冲）----
-      this._vy = -djumpV;
+      this._vy = jumpDir * djumpV;
       this._airJumps--;
       this.holding = true;
       this.holdTicks = 0;
@@ -230,26 +290,27 @@ export class World {
 
     if (this._grounded) {
       this._vy = 0;
-      this._airJumps = 0; // 任意落地/站台都重置空中跳
-      // 升降平台随行：先吸附到本 tick 台面再判走下边缘
+      this._airJumps = 0;
       const mv = this.moverUnder(x, half);
       if (mv !== null) {
-        this._y = this.moverTop(mv, this.tick) - PLAYER_R;
+        this._y = this.moverTop(mv, this.tick) - PLAYER_R * this._gravDir;
       } else if (!this.hasSupportAt(x, half)) {
         this._grounded = false;
         this.coyote = COYOTE_TICKS;
       }
-    }
-    if (!this._grounded) {
-      // 气流柱：处于柱体区间（中心在柱顶以下）时减重；飞出柱顶恢复常重力
+    } else {
+      // 空中重力积分
       let windF = 1;
       for (const wz of this.track.winds) {
-        if (x + half <= wz.x || x - half >= wz.x + wz.w) continue;
-        if (this._y >= GROUND_Y - wz.h) {
-          windF = Math.min(windF, wz.factor);
+        if (this._x >= wz.x && this._x <= wz.x + wz.w) {
+          const top = GROUND_Y - wz.h;
+          if (this._y >= top && this._y <= GROUND_Y) {
+            windF = wz.factor;
+            break;
+          }
         }
       }
-      let g = TUNING.grav * (windF < 1 ? windF : 1);
+      let g = TUNING.grav * (windF < 1 ? windF : 1) * this._gravDir;
       if (this.holding) {
         if ((input & IN_JUMP_HELD) !== 0 && this.holdTicks < HOLD_MAX_TICKS) {
           g *= TUNING.holdGravFactor;
@@ -258,14 +319,16 @@ export class World {
           this.holding = false;
         }
       }
-      const prevFeet = this._y + PLAYER_R;
+      const prevFeet = this._y + PLAYER_R * this._gravDir;
       this._vy += g * STEP_S;
       this._y += this._vy * STEP_S;
-      const feet = this._y + PLAYER_R;
-      if (this._vy >= 0) {
+      const feet = this._y + PLAYER_R * this._gravDir;
+
+      // 落地判断
+      if ((this._gravDir === 1 && this._vy >= 0) || (this._gravDir === -1 && this._vy <= 0)) {
         const top = this.landingTopAt(x, half, prevFeet, feet);
         if (top !== null) {
-          this._y = top - PLAYER_R;
+          this._y = top - PLAYER_R * this._gravDir;
           this._vy = 0;
           this._grounded = true;
           this.evq.push({ type: 'land' });
@@ -273,11 +336,11 @@ export class World {
       }
     }
 
-    // ---- 前进（加速带增益期间提速）----
+    // 前进
     this._x += (this._boostLeft > 0 ? TUNING.vx * BOOST_FACTOR : TUNING.vx) * STEP_S;
 
-    // ---- 弹跳菇：地面接触即弹射（含本 tick 落在菇上的情况）----
-    if (this._grounded) {
+    // 弹跳菇
+    if (this._grounded && this._gravDir === 1) {
       for (const pad of this.track.pads) {
         if (this._x + half > pad.x && this._x - half < pad.x + pad.w) {
           this._vy = -bounceV;
@@ -289,7 +352,7 @@ export class World {
       }
     }
 
-    // ---- 加速带：站台接触即触发（一次性，直到耗尽再踩才重触发）----
+    // 加速带
     if (this._grounded && this._boostLeft <= 0) {
       for (const z of this.track.boosts) {
         if (this._x + half > z.x && this._x - half < z.x + z.w) {
@@ -300,21 +363,71 @@ export class World {
       }
     }
 
-    // 计时
-    const timeMs = Math.round((this.tick * 1000) / TICK_RATE);
+    // ---- 重力翻转门 ----
+    if (this.track.portals) {
+      for (const p of this.track.portals) {
+        if (
+          Math.abs(p.x + p.w / 2 - this._x) < p.w / 2 + PLAYER_R &&
+          Math.abs(p.y + p.h / 2 - this._y) < p.h / 2 + PLAYER_R
+        ) {
+          if (this._gravDir !== p.targetGravDir) {
+            this._gravDir = p.targetGravDir;
+            this._vy = 0;
+            this._grounded = false;
+            this.holding = false;
+            this.evq.push({ type: 'portal', dir: this._gravDir });
+          }
+        }
+      }
+    }
 
-    // ---- 金币 ----
+    // ---- 护盾道具 ----
+    if (this.track.shields) {
+      for (let i = 0; i < this.track.shields.length; i++) {
+        if (this._shieldsGotIdx.has(i)) continue;
+        const sh = this.track.shields[i]!;
+        if (
+          Math.abs(sh.x - this._x) < PLAYER_R + 18 &&
+          Math.abs(sh.y - this._y) < PLAYER_R + 18
+        ) {
+          this._shieldsGotIdx.add(i);
+          this._hasShield = true;
+          this.evq.push({ type: 'shield' });
+        }
+      }
+    }
+
+    // ---- 磁铁道具 ----
+    if (this.track.magnets) {
+      for (let i = 0; i < this.track.magnets.length; i++) {
+        if (this._magnetsGotIdx.has(i)) continue;
+        const mg = this.track.magnets[i]!;
+        if (
+          Math.abs(mg.x - this._x) < PLAYER_R + 18 &&
+          Math.abs(mg.y - this._y) < PLAYER_R + 18
+        ) {
+          this._magnetsGotIdx.add(i);
+          this._magnetTicks = MAGNET_DURATION_TICKS;
+          this.evq.push({ type: 'magnet' });
+        }
+      }
+    }
+
+    // ---- 金币（支持普通拾取 + 磁铁超大范围吸引）----
     const coins = this.track.coins;
+    const isMagnet = this._magnetTicks > 0;
+    const collectR = isMagnet ? MAGNET_RADIUS : PLAYER_R + 12;
     for (let i = 0; i < coins.length; i++) {
       if (this._coinsGotIdx.has(i)) continue;
       const c = coins[i]!;
-      if (
-        Math.abs(c.x - this._x) < PLAYER_R + 11 &&
-        Math.abs(c.y - this._y) < PLAYER_R + 11
-      ) {
+      const dx = c.x - this._x;
+      const dy = c.y - this._y;
+      if (dx * dx + dy * dy < collectR * collectR) {
         this._coinsGotIdx.add(i);
         this._coinsGot++;
-        this.evq.push({ type: 'coin', index: i });
+        this._coinCombo++;
+        this._lastCoinTick = this.tick;
+        this.evq.push({ type: 'coin', index: i, combo: this._coinCombo });
       }
     }
 
@@ -333,18 +446,23 @@ export class World {
       }
     }
 
-    // ---- 尖刺（圆 vs AABB；按 x 排序可早退）----
-    for (const hz of this.track.hazards) {
+    // ---- 尖刺与极限擦刺判定（Near-Miss）----
+    for (let i = 0; i < this.track.hazards.length; i++) {
+      const hz = this.track.hazards[i]!;
       if (hz.x > this._x + 64) break;
-      if (
-        circleHitsRect(this._x, this._y, PLAYER_R * 0.8, hz.x, hz.y, hz.w, hz.h)
-      ) {
+      if (circleHitsRect(this._x, this._y, PLAYER_R * 0.8, hz.x, hz.y, hz.w, hz.h)) {
         this.die('spike');
         return;
+      } else if (!this._nearMissHazards.has(i)) {
+        // 极限擦刺（7px 间隙未碰）
+        if (circleHitsRect(this._x, this._y, PLAYER_R + 7, hz.x, hz.y, hz.w, hz.h)) {
+          this._nearMissHazards.add(i);
+          this.evq.push({ type: 'nearmiss', x: this._x, y: this._y });
+        }
       }
     }
 
-    // ---- 横扫钉球（圆 vs 圆；摆位是 tick 的纯函数）----
+    // ---- 横扫钉球 ----
     for (const pd of this.track.pendulums) {
       const bob = pendulumBob(pd, this.tick);
       if (Math.abs(bob.x - this._x) > pd.r + PLAYER_R + 8) continue;
@@ -357,7 +475,7 @@ export class World {
       }
     }
 
-    // ---- 激光闸门（圆 vs AABB；仅在危险通电激活时致死）----
+    // ---- 激光闸门 ----
     if (this.track.gates) {
       for (const gt of this.track.gates) {
         if (gt.x > this._x + 64) break;
@@ -371,90 +489,125 @@ export class World {
       }
     }
 
-    // ---- 坠坑 ----
-    if (this._y - PLAYER_R > PIT_Y) {
+    // ---- 坠坑（正向掉出地面，反向飞出天花板）----
+    if (this._gravDir === 1 && this._y - PLAYER_R > PIT_Y) {
+      this.die('pit');
+      return;
+    } else if (this._gravDir === -1 && this._y + PLAYER_R < -100) {
       this.die('pit');
       return;
     }
 
     // ---- 终点 / 计分 ----
-    if (!this._finished && this._x >= this.track.finishX) {
+    const timeMs = Math.round((this.tick * 1000) / TICK_RATE);
+    if (this._x >= this.track.finishX) {
       this._finished = true;
-      this._score = FINISH_BASE_SCORE - timeMs;
+      this._score = Math.max(
+        1,
+        FINISH_BASE_SCORE - timeMs + this._coinsGot * 50_000,
+      );
       this.evq.push({ type: 'finish' });
       return;
     }
-    this._score = Math.floor(this._x / 25) * 100 + this._coinsGot * 50;
+
+    this._score = Math.floor(this._x * 10) + this._coinsGot * 500;
   }
 
   private die(cause: 'spike' | 'pit' | 'ball' | 'laser'): void {
+    if (this._shieldInvulTicks > 0) return; // 护盾碎裂后短暂无敌
+    if (this._hasShield && cause !== 'pit') {
+      // 护盾抵扣致死伤害！
+      this._hasShield = false;
+      this._shieldInvulTicks = 22; // ~0.36s 保护无敌
+      this.evq.push({ type: 'shieldBreak' });
+      return;
+    }
     this._alive = false;
     this.evq.push({ type: 'crash', cause });
   }
 
-  /** 平台本 tick 的顶面 y（升降台按三角波偏移） */
-  private moverTop(p: Plat, tick: number): number {
-    return p.mover ? p.y + moverOffsetY(p.mover, tick) : p.y;
-  }
-
-  /** 脚下正踩着的升降台（吸附随行用） */
-  private moverUnder(x: number, half: number): Plat | null {
-    const feet = this._y + PLAYER_R;
-    for (const p of this.track.plats) {
-      if (!p.mover) continue;
-      if (x + half < p.x || x - half > p.x + p.w) continue;
-      if (Math.abs(feet - this.moverTop(p, this.tick)) <= 2) return p;
-    }
-    return null;
-  }
-
-  /** 站立支撑检测：脚下 2px 内存在平台顶且水平重叠。
-   *  首次站上碎裂板会触发其倒计时；已碎裂的板不再提供支撑。 */
   private hasSupportAt(x: number, half: number): boolean {
-    const feet = this._y + PLAYER_R;
-    for (const s of this.track.grounds) {
-      if (x + half < s.x0 || x - half > s.x1) continue;
-      if (Math.abs(feet - GROUND_Y) <= 2) return true;
+    if (this._gravDir === 1) {
+      for (const g of this.track.grounds) {
+        if (x + half > g.x0 && x - half < g.x1) return true;
+      }
     }
     for (let i = 0; i < this.track.plats.length; i++) {
       const p = this.track.plats[i]!;
-      if (p.crumble && this.platHp[i] === 0) continue; // 已碎
-      if (x + half < p.x || x - half > p.x + p.w) continue;
-      const py = this.moverTop(p, this.tick);
-      if (Math.abs(feet - py) <= 2) {
-        if (p.crumble && this.platHp[i] === -2) this.platHp[i] = CRUMBLE_TICKS;
-        return true;
+      if (this.platHp[i] === 0) continue;
+      if (p.inverted && this._gravDir !== -1) continue;
+      if (!p.inverted && this._gravDir === -1) continue;
+      if (x + half > p.x && x - half < p.x + p.w) {
+        const top = p.mover ? this.moverTop(p, this.tick) : p.y;
+        if (Math.abs(this._y + PLAYER_R * this._gravDir - top) < 4) return true;
       }
     }
     return false;
   }
 
-  /** 下落着陆检测：prevFeet 在顶之上、新 feet 穿过顶面（跳过已碎裂的板） */
+  private moverUnder(x: number, half: number): Plat | null {
+    for (let i = 0; i < this.track.plats.length; i++) {
+      const p = this.track.plats[i]!;
+      if (!p.mover) continue;
+      if (this.platHp[i] === 0) continue;
+      if (x + half > p.x && x - half < p.x + p.w) return p;
+    }
+    return null;
+  }
+
+  private moverTop(p: Plat, tick: number): number {
+    return p.mover ? p.y + moverOffsetY(p.mover, tick) : p.y;
+  }
+
   private landingTopAt(
     x: number,
     half: number,
     prevFeet: number,
     feet: number,
   ): number | null {
-    let best: number | null = null;
-    for (const s of this.track.grounds) {
-      if (x + half < s.x0 || x - half > s.x1) continue;
-      if (prevFeet <= GROUND_Y + 1 && feet >= GROUND_Y) {
-        best = best === null ? GROUND_Y : Math.min(best, GROUND_Y);
+    let bestTop: number | null = null;
+    if (this._gravDir === 1) {
+      // 正向重力：地面
+      for (const g of this.track.grounds) {
+        if (x + half > g.x0 && x - half < g.x1) {
+          if (prevFeet <= GROUND_Y && feet >= GROUND_Y) {
+            bestTop = GROUND_Y;
+          }
+        }
+      }
+      // 平台
+      for (let i = 0; i < this.track.plats.length; i++) {
+        const p = this.track.plats[i]!;
+        if (p.inverted) continue;
+        if (this.platHp[i] === 0) continue;
+        if (x + half > p.x && x - half < p.x + p.w) {
+          const top = p.mover ? this.moverTop(p, this.tick) : p.y;
+          if (prevFeet <= top && feet >= top) {
+            if (bestTop === null || top < bestTop) {
+              bestTop = top;
+              if (p.crumble && this.platHp[i] === -2) {
+                this.platHp[i] = CRUMBLE_TICKS;
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // 反向重力（天花板倒挂）
+      for (let i = 0; i < this.track.plats.length; i++) {
+        const p = this.track.plats[i]!;
+        if (!p.inverted) continue;
+        if (x + half > p.x && x - half < p.x + p.w) {
+          const top = p.y;
+          if (prevFeet >= top && feet <= top) {
+            if (bestTop === null || top > bestTop) {
+              bestTop = top;
+            }
+          }
+        }
       }
     }
-    for (let i = 0; i < this.track.plats.length; i++) {
-      const p = this.track.plats[i]!;
-      if (p.crumble && this.platHp[i] === 0) continue;
-      if (x + half < p.x || x - half > p.x + p.w) continue;
-      // 升降台：上一 tick 与本 tick 的台面都参与判定（追上抬升中的台面）
-      const pyPrev = this.moverTop(p, this.tick - 1);
-      const pyCur = this.moverTop(p, this.tick);
-      if (prevFeet <= pyPrev + 1 && feet >= pyCur) {
-        best = best === null ? pyCur : Math.min(best, pyCur);
-      }
-    }
-    return best;
+    return bestTop;
   }
 }
 
@@ -462,7 +615,6 @@ export function createWorld(seed: bigint): World {
   return new World(seed);
 }
 
-/** 用自定义赛道创建世界（测试 / 关卡工具 / 未来玩法变体） */
 export function createWorldWithTrack(seed: bigint, track: Track): World {
   return new World(seed, track);
 }
