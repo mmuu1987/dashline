@@ -8,6 +8,7 @@ export class InputBuffer {
   private presses = 0;
   private held = false;
   private restartHandlers: Array<() => void> = [];
+  private pauseHandlers: Array<() => void> = [];
 
   attach(canvas: HTMLCanvasElement): () => void {
     const isJumpKey = (e: KeyboardEvent): boolean =>
@@ -20,6 +21,8 @@ export class InputBuffer {
         this.held = true;
       } else if (e.code === 'KeyR') {
         for (const h of this.restartHandlers) h();
+      } else if (e.code === 'KeyP' || e.code === 'Escape') {
+        for (const h of this.pauseHandlers) h();
       }
     };
     const ku = (e: KeyboardEvent): void => {
@@ -50,6 +53,10 @@ export class InputBuffer {
 
   onRestart(h: () => void): void {
     this.restartHandlers.push(h);
+  }
+
+  onPause(h: () => void): void {
+    this.pauseHandlers.push(h);
   }
 
   /** 取本 tick 的输入字节（边沿只被消费一次） */

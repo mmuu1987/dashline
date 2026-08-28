@@ -71,7 +71,7 @@ interface Racer {
   timeMs: number | null;
 }
 
-type Phase = 'run' | 'dead' | 'done';
+type Phase = 'run' | 'dead' | 'done' | 'pause';
 
 async function boot(): Promise<void> {
   const app = new Application();
@@ -117,6 +117,34 @@ async function boot(): Promise<void> {
     muteBtn.textContent = muted ? '🔇' : '🔊';
     if (!muted) sfx.unlock(); // 解除静音时顺带恢复 BGM
   });
+
+  // ---- 暂停按钮与快捷键 ----
+  const pauseBtn = document.getElementById('btn-pause')!;
+  function togglePause(): void {
+    if (phase === 'dead' || phase === 'done') return;
+    if (phase === 'pause') {
+      phase = 'run';
+      hud.showPause(false);
+      pauseBtn.textContent = '⏸';
+      last = performance.now();
+      acc = 0;
+    } else {
+      phase = 'pause';
+      hud.showPause(true);
+      pauseBtn.textContent = '▶';
+    }
+  }
+  pauseBtn.addEventListener('click', togglePause);
+  document.getElementById('btn-resume')?.addEventListener('click', togglePause);
+  document.getElementById('btn-pause-retry')?.addEventListener('click', () => {
+    if (phase === 'pause') {
+      phase = 'run';
+      hud.showPause(false);
+      pauseBtn.textContent = '⏸';
+    }
+    resetAttempt();
+  });
+  input.onPause(() => togglePause());
 
   // ---- 状态 ----
   let phase: Phase = 'run';
@@ -244,6 +272,8 @@ async function boot(): Promise<void> {
     armRacer();
     phase = 'run';
     hud.hideResult();
+    hud.showPause(false);
+    pauseBtn.textContent = '⏸';
     hud.setMeta(attempts, best ? fmtBest(best) : '--', racer.label || undefined, streak);
   }
 
@@ -528,10 +558,10 @@ async function boot(): Promise<void> {
   let acc = 0;
   app.ticker.add(() => {
     const now = performance.now();
-    // 手机竖屏：冻结模拟，展示旋转提示（不累积时间，转回来无伤恢复）
+    // 手机竖屏或暂停：冻结模拟（不累积时间，恢复无伤继续）
     const blocked = isPortraitPhone();
     rotateOverlay.classList.toggle('show', blocked);
-    if (blocked) {
+    if (blocked || phase === 'pause') {
       last = now;
       acc = 0;
       return;

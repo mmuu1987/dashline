@@ -123,15 +123,22 @@
       @keyframes rot { 0%, 25% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
       #rotate-overlay .t1 { font-size: 20px; font-weight: 700; letter-spacing: .05em; }
       #rotate-overlay .t2 { font-size: 13px; opacity: .7; }
-      /* ---- 移动端全屏 / 静音按钮 ---- */
-      #btn-fs, #btn-mute {
+      /* ---- 暂停遮罩与按钮 ---- */
+      #pause-overlay {
+        position: absolute; inset: 0; display: none;
+        align-items: center; justify-content: center;
+        background: rgba(8,10,16,.55); backdrop-filter: blur(4px);
+        pointer-events: auto; z-index: 15;
+      }
+      #pause-overlay.show { display: flex; }
+      #btn-fs, #btn-mute, #btn-pause {
         display: flex;
         position: absolute;
         width: 42px; height: 42px;
         align-items: center; justify-content: center;
         border-radius: 12px;
-        background: rgba(30,36,54,.72); color: #cfd8ea;
-        font-size: 20px; pointer-events: auto;
+        background: rgba(30,36,54,.78); color: #cfd8ea;
+        font-size: 19px; pointer-events: auto;
         backdrop-filter: blur(6px);
       }
       #btn-fs { display: none; }
@@ -144,6 +151,10 @@
         left: calc(12px + env(safe-area-inset-left));
         bottom: calc(44px + env(safe-area-inset-bottom));
       }
+      #btn-pause {
+        left: calc(60px + env(safe-area-inset-left));
+        bottom: calc(44px + env(safe-area-inset-bottom));
+      }
     </style>
   </head>
   <body>
@@ -153,12 +164,23 @@
         <div id="flash"></div>
         <div class="hud-box" id="hud-stats"></div>
         <div class="hud-box" id="hud-meta"></div>
-        <div class="hud-box" id="hud-hint">点按小跳 · 按住蓄力跳更高更远 · R 重开</div>
+        <div class="hud-box" id="hud-hint">点按小跳 · 按住蓄力跳更高更远 · P 暂停 · R 重开</div>
         <div class="hud-box" id="hud-mode">…</div>
         <div id="result"><div class="panel" id="result-panel"></div></div>
+        <div id="pause-overlay">
+          <div class="panel">
+            <h2>⏸ 游戏已暂停</h2>
+            <div class="row">画面已定格，方便您观察或截图</div>
+            <div class="btns">
+              <button id="btn-resume">继续游戏 (P / 空格)</button>
+              <button id="btn-pause-retry" class="ghost-btn">重新开始 (R)</button>
+            </div>
+          </div>
+        </div>
         <div id="toast"></div>
         <button id="btn-fs" aria-label="全屏">⛶</button>
         <button id="btn-mute" aria-label="声音开关">🔊</button>
+        <button id="btn-pause" aria-label="暂停/继续">⏸</button>
       </div>
       <div id="rotate-overlay">
         <div class="phone">📱</div>

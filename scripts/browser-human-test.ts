@@ -157,8 +157,27 @@ async function runHumanTest(): Promise<void> {
       await page.waitForTimeout(400);
     }
 
-    // 7. 音频控件交互测试
-    console.log('[7/7] 模拟真人点击静音切换按钮...');
+    // 7. 暂停功能测试
+    console.log('[7/8] 模拟真人点击暂停按钮与按 P 键暂停...');
+    const pauseBtn = page.locator('#btn-pause');
+    await pauseBtn.click();
+    await page.waitForTimeout(300);
+    const pauseOverlay = page.locator('#pause-overlay');
+    const isPaused = await pauseOverlay.isVisible();
+    console.log(`✓ 暂停成功，遮罩显示: ${isPaused}`);
+
+    // 保存暂停截图
+    const pausePicPath = path.join(SCREENSHOT_DIR, 'human_test_04_paused.png');
+    await page.screenshot({ path: pausePicPath });
+    console.log(`✓ 截图已保存: ${pausePicPath}`);
+
+    // 点击继续
+    await page.locator('#btn-resume').click();
+    await page.waitForTimeout(300);
+    console.log('✓ 恢复游戏运行');
+
+    // 8. 音频控件交互测试
+    console.log('[8/8] 模拟真人点击静音切换按钮...');
     const muteBtn = page.locator('#btn-mute');
     const initMute = await muteBtn.innerText();
     await muteBtn.click();
