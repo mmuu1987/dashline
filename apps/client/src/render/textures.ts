@@ -91,43 +91,68 @@ function makeVignette(): Texture {
   });
 }
 
-/** 主角滚球：径向渐变球体 + 暗色楔形条纹（让滚动可见）+ 高光 */
+/** 主角滚球：晶莹剔透的水晶精灵球体 + 柔和光纹（滚动平滑可见）+ 弧形高光与内发光 */
 function makeBall(): Texture {
   const S = 96;
   return canvasTexture(S, S, (ctx) => {
     const cx = S / 2;
     const r = S / 2 - 4;
-    const body = ctx.createRadialGradient(cx - r * 0.35, cx - r * 0.45, r * 0.15, cx, cx, r);
-    body.addColorStop(0, '#8fe6ff');
-    body.addColorStop(0.55, '#31aae6');
-    body.addColorStop(1, '#14609f');
+
+    // 1. 底色柔和外发光
+    const outerGlow = ctx.createRadialGradient(cx, cx, r * 0.7, cx, cx, r + 3);
+    outerGlow.addColorStop(0, 'rgba(56,189,248,0.4)');
+    outerGlow.addColorStop(1, 'rgba(56,189,248,0)');
+    ctx.fillStyle = outerGlow;
+    ctx.beginPath();
+    ctx.arc(cx, cx, r + 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. 水晶球体多层渐变（透亮天蓝与深邃海蓝）
+    const body = ctx.createRadialGradient(cx - r * 0.35, cx - r * 0.35, r * 0.1, cx, cx, r);
+    body.addColorStop(0, '#e0f2fe');
+    body.addColorStop(0.35, '#38bdf8');
+    body.addColorStop(0.75, '#0284c7');
+    body.addColorStop(1, '#0369a1');
     ctx.fillStyle = body;
     ctx.beginPath();
     ctx.arc(cx, cx, r, 0, Math.PI * 2);
     ctx.fill();
-    // 滚动可见的楔形条纹 ×3
-    ctx.fillStyle = 'rgba(13,73,128,0.75)';
+
+    // 3. 晶莹微光符纹（轻盈柔和的螺旋光纹，旋转时优雅平滑）
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
     for (let k = 0; k < 3; k++) {
       const a0 = (k * 2 * Math.PI) / 3;
       ctx.beginPath();
-      ctx.moveTo(cx, cx);
-      ctx.arc(cx, cx, r, a0, a0 + 0.62);
+      ctx.arc(cx, cx, r * 0.82, a0, a0 + 0.45);
+      ctx.arc(cx, cx, r * 0.45, a0 + 0.45, a0, true);
       ctx.closePath();
       ctx.fill();
     }
-    // 内圈描边
-    ctx.strokeStyle = 'rgba(10,40,70,0.8)';
-    ctx.lineWidth = 3;
+
+    // 4. 精细水晶边缘描边
+    ctx.strokeStyle = 'rgba(2,132,199,0.9)';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(cx, cx, r - 1.5, 0, Math.PI * 2);
+    ctx.arc(cx, cx, r - 1, 0, Math.PI * 2);
     ctx.stroke();
-    // 左上高光
-    const hi = ctx.createRadialGradient(cx - r * 0.4, cx - r * 0.5, 1, cx - r * 0.4, cx - r * 0.5, r * 0.5);
-    hi.addColorStop(0, 'rgba(255,255,255,0.65)');
+
+    // 5. 顶层主高光（弧形玻璃质感）
+    const hi = ctx.createRadialGradient(cx - r * 0.32, cx - r * 0.38, 2, cx - r * 0.32, cx - r * 0.38, r * 0.42);
+    hi.addColorStop(0, 'rgba(255,255,255,0.95)');
+    hi.addColorStop(0.5, 'rgba(255,255,255,0.4)');
     hi.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = hi;
     ctx.beginPath();
-    ctx.arc(cx - r * 0.4, cx - r * 0.5, r * 0.5, 0, Math.PI * 2);
+    ctx.arc(cx - r * 0.32, cx - r * 0.38, r * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 6. 底部柔和反光（地面环境光）
+    const rim = ctx.createRadialGradient(cx + r * 0.25, cx + r * 0.4, r * 0.05, cx + r * 0.25, cx + r * 0.4, r * 0.45);
+    rim.addColorStop(0, 'rgba(125,211,252,0.6)');
+    rim.addColorStop(1, 'rgba(125,211,252,0)');
+    ctx.fillStyle = rim;
+    ctx.beginPath();
+    ctx.arc(cx, cx, r - 1.5, 0, Math.PI * 2);
     ctx.fill();
   });
 }

@@ -96,14 +96,14 @@ async function runHumanTest(): Promise<void> {
     // 动作 1：小跳起步
     console.log('  -> 模拟真人点按 [Space] 短跳');
     await page.keyboard.press('Space');
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(700);
 
-    // 动作 2：蓄力大跳 (按住 250ms)
-    console.log('  -> 模拟真人长按 [Space] 蓄力大跳 (250ms)');
+    // 动作 2：蓄力大跳 (按住 280ms)
+    console.log('  -> 模拟真人长按 [Space] 蓄力大跳 (280ms)');
     await page.keyboard.down('Space');
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(280);
     await page.keyboard.up('Space');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1400);
 
     // 读取实时跑动距离
     const runningStats = await page.locator('#hud-stats').innerText();
@@ -114,8 +114,8 @@ async function runHumanTest(): Promise<void> {
     await page.screenshot({ path: runPicPath });
     console.log(`✓ 截图已保存: ${runPicPath}`);
 
-    // 等待发生撞毁/结算
-    await page.waitForTimeout(1800);
+    // 等待发生撞毁/结算并抓取机关
+    await page.waitForTimeout(1200);
 
     // 截图 2: 撞毁结算
     const crashPicPath = path.join(SCREENSHOT_DIR, 'human_test_02_crash.png');

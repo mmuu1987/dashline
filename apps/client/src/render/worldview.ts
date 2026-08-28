@@ -169,20 +169,62 @@ export class WorldView {
       this.root.addChild(cap);
     }
 
-    // 尖刺 / 悬空刺梁（梁 = 底边远高于地面的盒子：画成带铆钉的悬梁）
+    // 尖刺 / 悬空双面致命刺梁（全方位带刺 + 黄黑警示斜纹 + 危险指示灯，绝无歧义）
     for (const hz of track.hazards) {
       const isBar = hz.y + hz.h < GROUND_Y - 60;
       if (isBar) {
         const beam = new Graphics();
-        beam.roundRect(hz.x, hz.y, hz.w, hz.h, 4).fill(0x39404e);
-        beam.roundRect(hz.x, hz.y + hz.h - 5, hz.w, 5, 2).fill(0xb8c4d4);
-        for (let rx = hz.x + 12; rx < hz.x + hz.w - 8; rx += 26) {
-          beam.circle(rx, hz.y + hz.h / 2, 2.4).fill(0x9aa6b8);
+        // 1. 底底主体金属条
+        beam.roundRect(hz.x, hz.y, hz.w, hz.h, 3).fill(0x1e2432);
+
+        // 2. 黄黑相间危险警示斜纹
+        for (let sx = hz.x - 10; sx < hz.x + hz.w + 10; sx += 20) {
+          const x0 = Math.max(hz.x, sx);
+          const x1 = Math.min(hz.x + hz.w, sx + 10);
+          if (x1 > x0) {
+            beam
+              .moveTo(x0, hz.y)
+              .lineTo(Math.min(hz.x + hz.w, x0 + 8), hz.y)
+              .lineTo(Math.min(hz.x + hz.w, x0 - 2 + hz.h), hz.y + hz.h)
+              .lineTo(Math.max(hz.x, x0 - 10 + hz.h), hz.y + hz.h)
+              .closePath()
+              .fill({ color: 0xf59e0b, alpha: 0.95 });
+          }
         }
-        // 底面短齿提示危险
-        for (let tx = hz.x + 10; tx < hz.x + hz.w - 8; tx += SPIKE_W) {
-          beam.moveTo(tx, hz.y + hz.h).lineTo(tx + SPIKE_W / 2, hz.y + hz.h + 7).lineTo(tx + SPIKE_W, hz.y + hz.h).fill(0xb8c4d4);
+        beam.roundRect(hz.x, hz.y, hz.w, hz.h, 3).stroke({ width: 2, color: 0x334155 });
+
+        // 3. 顶部尖刺群（向上的锐利尖刺，清晰警告：顶面绝对不可踩！）
+        for (let tx = hz.x + 4; tx < hz.x + hz.w - 12; tx += SPIKE_W) {
+          beam
+            .moveTo(tx, hz.y)
+            .lineTo(tx + SPIKE_W / 2, hz.y - 12)
+            .lineTo(tx + SPIKE_W, hz.y)
+            .closePath()
+            .fill(0xc5d0e0)
+            .stroke({ width: 1.5, color: 0x1e293b });
+          // 尖刺金属高光线
+          beam.moveTo(tx + 2, hz.y).lineTo(tx + SPIKE_W / 2, hz.y - 10).stroke({ width: 1, color: 0xffffff });
         }
+
+        // 4. 底部尖刺群（向下的锐利尖刺，警告：必须低跳擦过！）
+        for (let tx = hz.x + 4; tx < hz.x + hz.w - 12; tx += SPIKE_W) {
+          beam
+            .moveTo(tx, hz.y + hz.h)
+            .lineTo(tx + SPIKE_W / 2, hz.y + hz.h + 12)
+            .lineTo(tx + SPIKE_W, hz.y + hz.h)
+            .closePath()
+            .fill(0xc5d0e0)
+            .stroke({ width: 1.5, color: 0x1e293b });
+          // 尖刺金属高光线
+          beam.moveTo(tx + 2, hz.y + hz.h).lineTo(tx + SPIKE_W / 2, hz.y + hz.h + 10).stroke({ width: 1, color: 0xffffff });
+        }
+
+        // 5. 左右两端危险护甲与中间警示红灯
+        beam.rect(hz.x - 2, hz.y, 4, hz.h).fill(0xdc2626);
+        beam.rect(hz.x + hz.w - 2, hz.y, 4, hz.h).fill(0xdc2626);
+        beam.circle(hz.x + hz.w / 2, hz.y + hz.h / 2, 5).fill(0xef4444);
+        beam.circle(hz.x + hz.w / 2, hz.y + hz.h / 2, 2.5).fill(0xffffff);
+
         this.root.addChild(beam);
         continue;
       }
