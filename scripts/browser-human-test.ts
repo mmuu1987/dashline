@@ -120,9 +120,29 @@ async function runHumanTest(): Promise<void> {
     await page.screenshot({ path: crashPicPath });
     console.log(`✓ 截图已保存: ${crashPicPath}`);
 
-    // 5. 第二局：模拟真人按 R 键重开
-    console.log('[5/9] 模拟真人按 [R] 键快速重开...');
-    await page.keyboard.press('KeyR');
+    // 5. 交互测试：查看排行榜弹窗并关闭返回结算面板
+    console.log('[5/10] 模拟真人点击结算面板 [榜单] 按钮...');
+    const boardBtn = page.locator('#btn-board');
+    if (await boardBtn.isVisible()) {
+      await boardBtn.click();
+      await page.waitForTimeout(400);
+      const boardPicPath = path.join(SCREENSHOT_DIR, 'human_test_03_board.png');
+      await page.screenshot({ path: boardPicPath });
+      console.log(`✓ 榜单面板截图已保存: ${boardPicPath}`);
+
+      console.log('  -> 模拟真人点击榜单 [关闭] 按钮返回结算面板...');
+      await page.click('#btn-bclose', { force: true });
+      await page.waitForTimeout(400);
+    }
+
+    // 6. 第二局：模拟真人点击结算面板 [再跑一次] 按钮
+    console.log('[6/10] 模拟真人点击 [再跑一次] 按钮快速重开...');
+    const retryBtn = page.locator('#btn-retry');
+    if (await retryBtn.isVisible()) {
+      await retryBtn.click();
+    } else {
+      await page.keyboard.press('KeyR');
+    }
     await page.waitForTimeout(500);
 
     const round2Meta = await page.locator('#hud-meta').innerText();

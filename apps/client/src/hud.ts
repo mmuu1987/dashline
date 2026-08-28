@@ -199,4 +199,8 @@ export class Hud {
   hideResult(): void {
     this.resultEl.classList.remove('show');
   }
+
+  isModalOpen(): boolean {
+    return this.resultEl.classList.contains('show');
+  }
 }

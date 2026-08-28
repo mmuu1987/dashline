@@ -137,13 +137,23 @@ async function boot(): Promise<void> {
   input.onPause(() => togglePause());
 
   let prevModalPhase: Phase | null = null;
-  function enterModal(): void {
+  let openedFromResult = false;
+
+  function enterModal(fromResult = false): void {
+    openedFromResult = fromResult || phase === 'done';
     if (phase === 'run') {
       prevModalPhase = phase;
       phase = 'pause';
     }
   }
+
   function exitModal(): void {
+    if (openedFromResult && phase === 'done') {
+      openedFromResult = false;
+      showResultPanel();
+      return;
+    }
+    openedFromResult = false;
     hud.hideResult();
     if (prevModalPhase) {
       phase = prevModalPhase;
@@ -326,6 +336,20 @@ async function boot(): Promise<void> {
     if (phase !== 'dead') resetAttempt();
   });
 
+  input.onAction(() => {
+    if (phase === 'done' && !hud.isModalOpen()) {
+      resetAttempt();
+    }
+  });
+
+  window.addEventListener('pointerdown', (e) => {
+    if (phase === 'done' && !hud.isModalOpen()) {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('button')) return;
+      resetAttempt();
+    }
+  });
+
   // ---- 移动端适配 ----
   const rotateOverlay = document.getElementById('rotate-overlay')!;
   const isPortraitPhone = (): boolean =>
@@ -423,8 +447,8 @@ async function boot(): Promise<void> {
       .catch(() => hud.toast('复制失败（浏览器限制）'));
   }
 
-  async function openBoard(): Promise<void> {
-    enterModal();
+  async function openBoard(fromResult = false): Promise<void> {
+    enterModal(fromResult);
     hud.toast('榜单加载中…');
     const [entries, offers] = await Promise.all([fetchBoard(dateStr), fetchGhosts(dateStr)]);
     if (offers) ghostOffers = offers;
@@ -475,7 +499,7 @@ async function boot(): Promise<void> {
       onRetry: () => resetAttempt(),
       onCard: () => void makeShareCard(),
       onShare: shareResult,
-      onBoard: () => void openBoard(),
+      onBoard: () => void openBoard(true),
     });
   }
 

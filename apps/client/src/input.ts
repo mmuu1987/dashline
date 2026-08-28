@@ -9,6 +9,7 @@ export class InputBuffer {
   private held = false;
   private restartHandlers: Array<() => void> = [];
   private pauseHandlers: Array<() => void> = [];
+  private actionHandlers: Array<() => void> = [];
 
   attach(canvas: HTMLCanvasElement): () => void {
     const isJumpKey = (e: KeyboardEvent): boolean =>
@@ -17,9 +18,12 @@ export class InputBuffer {
     const kd = (e: KeyboardEvent): void => {
       if (isJumpKey(e)) {
         e.preventDefault();
-        if (!e.repeat) this.presses++;
+        if (!e.repeat) {
+          this.presses++;
+          for (const h of this.actionHandlers) h();
+        }
         this.held = true;
-      } else if (e.code === 'KeyR') {
+      } else if (e.code === 'KeyR' || e.code === 'Enter') {
         for (const h of this.restartHandlers) h();
       } else if (e.code === 'KeyP' || e.code === 'Escape') {
         for (const h of this.pauseHandlers) h();
@@ -32,6 +36,7 @@ export class InputBuffer {
       e.preventDefault();
       this.presses++;
       this.held = true;
+      for (const h of this.actionHandlers) h();
     };
     const pu = (): void => {
       this.held = false;
@@ -53,6 +58,10 @@ export class InputBuffer {
 
   onRestart(h: () => void): void {
     this.restartHandlers.push(h);
+  }
+
+  onAction(h: () => void): void {
+    this.actionHandlers.push(h);
   }
 
   onPause(h: () => void): void {

@@ -1,59 +1,60 @@
 /**
- * 成就系统：6 大核心成就追踪、持久化存储与解锁提示。
+ * 荣誉成就系统：
+ * 记录玩家在赛道上的各种精彩操作、里程碑与挑战达成情况。
  */
 
 export interface AchievementDef {
   id: string;
-  icon: string;
   title: string;
   desc: string;
+  icon: string;
   unlocked: boolean;
   unlockedAt?: number;
 }
 
-const ACHIEVEMENTS: Omit<AchievementDef, 'unlocked'>[] = [
+const STORAGE_KEY = 'dl_achievements';
+
+const INITIAL_ACHIEVEMENTS: Omit<AchievementDef, 'unlocked'>[] = [
   {
     id: 'first_finish',
-    icon: '🥇',
     title: '初次完赛',
     desc: '成功越过所有重重难关，首次抵达终点线',
+    icon: '🥇',
   },
   {
     id: 'coin_master',
-    icon: '💎',
     title: '满载而归',
     desc: '单局游戏中累计收集 15 枚以上宝石',
+    icon: '💎',
   },
   {
     id: 'near_miss',
-    icon: '⚡',
     title: '极限闪避',
-    desc: '单局内与致命尖刺发生 2 次毫厘级极限擦碰且存活',
+    desc: '单局内与致命尖刺发生 2 次毫米级极限擦碰且存活',
+    icon: '⚡',
   },
   {
     id: 'shield_hero',
-    icon: '🛡️',
     title: '坚不可摧',
     desc: '消耗护盾抵扣一次致命伤害后依然顺利完赛',
+    icon: '🛡️',
   },
   {
     id: 'gravity_master',
-    icon: '🔄',
     title: '乾坤颠倒',
-    desc: '成功穿越重力反转门并在天花板上倒挂飞驰',
+    desc: '通过重力引力门在天花板上倒挂飞驰并安全着陆',
+    icon: '🔄',
   },
   {
     id: 'streak_7',
+    title: '七日传说',
+    desc: '连续 7 天每日均有完赛记录',
     icon: '🔥',
-    title: '七日连胜',
-    desc: '连续 7 天每日至少完赛通关一次',
   },
 ];
 
-const LS_ACHIEVEMENTS_KEY = 'dl_achievements';
-
 export class Achievements {
-  private unlockedMap = new Map<string, number>();
+  private unlockedMap: Record<string, number> = {};
 
   constructor() {
     this.load();
@@ -61,43 +62,49 @@ export class Achievements {
 
   private load(): void {
     try {
-      const raw = localStorage.getItem(LS_ACHIEVEMENTS_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const obj = JSON.parse(raw) as Record<string, number>;
-        for (const [k, v] of Object.entries(obj)) {
-          this.unlockedMap.set(k, v);
-        }
+        this.unlockedMap = JSON.parse(raw) as Record<string, number>;
       }
     } catch {
-      /* 忽略 */
+      this.unlockedMap = {};
     }
   }
 
   private save(): void {
     try {
-      const obj: Record<string, number> = {};
-      for (const [k, v] of this.unlockedMap.entries()) obj[k] = v;
-      localStorage.setItem(LS_ACHIEVEMENTS_KEY, JSON.stringify(obj));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.unlockedMap));
     } catch {
-      /* 忽略 */
+      // ignore
     }
   }
 
   getAll(): AchievementDef[] {
-    return ACHIEVEMENTS.map((a) => ({
+    return INITIAL_ACHIEVEMENTS.map((a) => ({
       ...a,
-      unlocked: this.unlockedMap.has(a.id),
-      unlockedAt: this.unlockedMap.get(a.id),
+      unlocked: Boolean(this.unlockedMap[a.id]),
+      unlockedAt: this.unlockedMap[a.id],
     }));
   }
 
   unlock(id: string): AchievementDef | null {
-    if (this.unlockedMap.has(id)) return null;
-    const a = ACHIEVEMENTS.find((item) => item.id === id);
-    if (!a) return null;
-    this.unlockedMap.set(id, Date.now());
+    if (this.unlockedMap[id]) return null; // already unlocked
+    const def = INITIAL_ACHIEVEMENTS.find((a) => a.id === id);
+    if (!def) return null;
+
+    const now = Date.now();
+    this.unlockedMap[id] = now;
     this.save();
-    return { ...a, unlocked: true, unlockedAt: Date.now() };
+
+    return {
+      ...def,
+      unlocked: true,
+      unlockedAt: now,
+    };
+  }
+
+  isUnlocked(id: string): boolean {
+    return Boolean(this.unlockedMap[id]);
   }
 }
 
