@@ -11,7 +11,8 @@
     "preview": "pnpm --filter @dashline/client preview",
     "test": "vitest run",
     "test:browser": "tsx scripts/browser-human-test.ts",
-    "test:seeds": "pnpm --filter @dashline/api exec tsx scripts/test-multi-seeds.ts"
+    "test:seeds": "pnpm --filter @dashline/api exec tsx scripts/test-multi-seeds.ts",
+    "pages:deploy": "tsx scripts/deploy-pages.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
