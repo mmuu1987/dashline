@@ -78,7 +78,7 @@ async function runHumanTest(): Promise<void> {
       console.error(`[Browser PageError]`, err);
     });
 
-    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await page.goto('http://localhost:5173', { waitUntil: 'commit' });
 
     // 3. 验证 Canvas 与 HUD 初始状态
     console.log('[3/7] 验证 WebGL Canvas 与 HUD 渲染...');
@@ -157,22 +157,22 @@ async function runHumanTest(): Promise<void> {
       await page.waitForTimeout(400);
     }
 
-    // 7. 暂停功能测试
+    // 7. 纯净无遮挡定格暂停测试
     console.log('[7/8] 模拟真人点击暂停按钮与按 P 键暂停...');
     const pauseBtn = page.locator('#btn-pause');
     await pauseBtn.click();
     await page.waitForTimeout(300);
-    const pauseOverlay = page.locator('#pause-overlay');
-    const isPaused = await pauseOverlay.isVisible();
-    console.log(`✓ 暂停成功，遮罩显示: ${isPaused}`);
+    const pauseBadge = page.locator('#pause-badge');
+    const isPaused = await pauseBadge.isVisible();
+    console.log(`✓ 暂停成功，顶部轻量提示徽章显示: ${isPaused}`);
 
-    // 保存暂停截图
+    // 保存纯净定格截图
     const pausePicPath = path.join(SCREENSHOT_DIR, 'human_test_04_paused.png');
     await page.screenshot({ path: pausePicPath });
-    console.log(`✓ 截图已保存: ${pausePicPath}`);
+    console.log(`✓ 纯净定格截图已保存: ${pausePicPath}`);
 
-    // 点击继续
-    await page.locator('#btn-resume').click();
+    // 再次点击暂停按钮（或按 P）继续
+    await pauseBtn.click();
     await page.waitForTimeout(300);
     console.log('✓ 恢复游戏运行');
 

@@ -29,12 +29,12 @@ export class Hud {
   private flashEl = document.getElementById('flash')!;
   private resultEl = document.getElementById('result')!;
   private panel = document.getElementById('result-panel')!;
-  private pauseOverlay = document.getElementById('pause-overlay')!;
+  private pauseBadge = document.getElementById('pause-badge')!;
   private toastEl = document.getElementById('toast')!;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   showPause(show: boolean): void {
-    this.pauseOverlay.classList.toggle('show', show);
+    this.pauseBadge.classList.toggle('show', show);
   }
 
   update(timeMs: number, distanceM: number, coinCount: number): void {
