@@ -204,7 +204,10 @@ export class Particles {
       p.t += dtSec;
       if (p.t >= p.life) {
         this.root.removeChild(p.s);
-        this.live.splice(i, 1);
+        const last = this.live.pop();
+        if (i < this.live.length && last) {
+          this.live[i] = last;
+        }
         this.pool.push(p);
         continue;
       }
@@ -214,7 +217,7 @@ export class Particles {
       p.s.rotation += p.spin * dtSec;
       const k = 1 - p.t / p.life;
       p.s.alpha = p.baseAlpha * k;
-      if (p.shrink) p.s.scale.set(p.s.scale.x * (0.985));
+      if (p.shrink) p.s.scale.set(p.s.scale.x * 0.985);
     }
   }
 }

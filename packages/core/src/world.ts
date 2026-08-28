@@ -173,6 +173,8 @@ export class World {
   private _nearMissHazards = new Set<number>();
   private evq: SimEvent[] = [];
 
+  private _cachedSnap: WorldSnapshot | null = null;
+
   constructor(seed: bigint, track?: Track, perks?: PerksConfig) {
     this.seed = seed;
     this.track = track ?? buildTrack(seed);
@@ -185,6 +187,7 @@ export class World {
   }
 
   get snapshot(): WorldSnapshot {
+    if (this._cachedSnap) return this._cachedSnap;
     const broken: number[] = [];
     for (let i = 0; i < this.platHp.length; i++) {
       if (this.platHp[i] === 0) broken.push(i);
@@ -192,7 +195,7 @@ export class World {
     const ringsGotArr: number[] = [];
     for (const i of this._ringsGotIdx) ringsGotArr.push(i);
     ringsGotArr.sort((a, b) => a - b);
-    return {
+    this._cachedSnap = {
       tick: this.tick,
       x: this._x,
       y: this._y,
@@ -217,12 +220,13 @@ export class World {
       slamming: this._slamming,
       canAirDash: this._canAirDash,
     };
+    return this._cachedSnap;
   }
 
   takeEvents(): SimEvent[] {
     if (this.evq.length === 0) return [];
-    const out = this.evq.slice();
-    this.evq.length = 0;
+    const out = this.evq;
+    this.evq = [];
     return out;
   }
 
@@ -262,11 +266,13 @@ export class World {
     c._magnetsGotIdx = new Set(this._magnetsGotIdx);
     c._nearMissHazards = new Set(this._nearMissHazards);
     c.evq = [];
+    c._cachedSnap = null;
     return c;
   }
 
   step(input: number): void {
     if (!this._alive || this._finished) return;
+    this._cachedSnap = null;
     this.tick++;
     if (this._boostLeft > 0) this._boostLeft--;
     if (this._shieldInvulTicks > 0) this._shieldInvulTicks--;

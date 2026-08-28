@@ -51,10 +51,13 @@ export class Hud {
     this.comboTimer = setTimeout(() => this.comboTag.classList.remove('pop'), 800);
   }
 
+  private lastStatsText = '';
   update(timeMs: number, distanceM: number, coinCount: number): void {
-    this.stats.textContent =
-      `⏱ ${(timeMs / 1000).toFixed(2)}s\n` +
-      `📏 ${distanceM}m   🪙 ${coinCount}`;
+    const text = `⏱ ${(timeMs / 1000).toFixed(2)}s\n📏 ${distanceM}m   🪙 ${coinCount}`;
+    if (this.lastStatsText !== text) {
+      this.lastStatsText = text;
+      this.stats.textContent = text;
+    }
   }
 
   setMeta(attempts: number, bestText: string, opponent?: string, streak?: number): void {

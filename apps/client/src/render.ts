@@ -141,9 +141,9 @@ export class GameView {
     this.bg.update(this.camX, dt);
     this.camera.x = -this.camX;
     this.worldView.setCrumbles(snap.crumblesBroken);
-    this.worldView.setTick(snap.tick);
+    this.worldView.setTick(snap.tick, this.camX);
     this.worldView.setRingsGot(snap.ringsGot ?? []);
-    this.worldView.update(tSec);
+    this.worldView.update(tSec, this.camX);
 
     this.player.setState(snap);
 

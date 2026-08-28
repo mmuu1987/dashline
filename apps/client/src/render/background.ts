@@ -289,14 +289,10 @@ export class Background {
 
     // 1. 天空渐变重绘（明亮纯净）
     this.skyG.clear();
-    const grad = new FillGradient(0, 0, 0, VIEW_H, {
-      type: 'linear',
-      colorStops: [
-        { offset: 0, color: pal.skyTop },
-        { offset: 0.52, color: pal.skyMid },
-        { offset: 1, color: pal.skyBottom },
-      ],
-    } as never);
+    const grad = new FillGradient(0, 0, 0, VIEW_H);
+    grad.addColorStop(0, pal.skyTop);
+    grad.addColorStop(0.52, pal.skyMid);
+    grad.addColorStop(1, pal.skyBottom);
     this.skyG.rect(0, 0, VIEW_W, VIEW_H).fill(grad);
 
     // 2. 星空

@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js';
 import { GROUND_Y, SPIKE_W, isGateActive, moverOffsetY, pendulumBob, type Track } from '@dashline/core';
 import { splitmix32 } from '@dashline/shared';
-import { VIEW_H } from './consts.js';
+import { VIEW_H, VIEW_W } from './consts.js';
 import type { GameAssets } from './textures.js';
 
 export class WorldView {
@@ -473,17 +473,22 @@ export class WorldView {
     }
   }
 
-  setTick(tick: number): void {
+  setTick(tick: number, camX?: number): void {
     this.simTick = tick;
     const t = this.track;
     if (!t) return;
+    const minX = camX !== undefined ? camX - 120 : -Infinity;
+    const maxX = camX !== undefined ? camX + VIEW_W + 120 : Infinity;
+
     for (let i = 0; i < t.plats.length; i++) {
       const p = t.plats[i]!;
+      if (p.x + p.w < minX || p.x > maxX) continue;
       const sp = this.moverSprites[i];
       if (p.mover && sp) sp.y = p.y + moverOffsetY(p.mover, tick);
     }
     for (let i = 0; i < t.pendulums.length; i++) {
       const pd = t.pendulums[i]!;
+      if (pd.x1 < minX || pd.x0 > maxX) continue;
       const g = this.pendulumSprites[i];
       if (!g) continue;
       const bob = pendulumBob(pd, tick);
@@ -499,6 +504,7 @@ export class WorldView {
     if (t.gates) {
       for (let i = 0; i < t.gates.length; i++) {
         const gt = t.gates[i]!;
+        if (gt.x + gt.w < minX || gt.x > maxX) continue;
         const active = isGateActive(gt, tick);
         const beam = this.gateBeams[i];
         const diode = this.gateDiodes[i];
@@ -562,11 +568,16 @@ export class WorldView {
     return best;
   }
 
-  update(tSec: number): void {
-    // 宝石动画
+  update(tSec: number, camX?: number): void {
+    const t = this.track;
+    const minX = camX !== undefined ? camX - 120 : -Infinity;
+    const maxX = camX !== undefined ? camX + VIEW_W + 120 : Infinity;
+
+    // 宝石动画（视口裁剪）
     for (let i = 0; i < this.coinSprites.length; i++) {
       const s = this.coinSprites[i]!;
       if (!s.visible) continue;
+      if (t && t.coins[i] && (t.coins[i]!.x < minX || t.coins[i]!.x > maxX)) continue;
       s.texture = this.assets.gemFrames[Math.floor(tSec * 8 + i) % 4]!;
       s.y += Math.sin(tSec * 2.6 + i) * 0.18;
     }
@@ -574,6 +585,7 @@ export class WorldView {
     for (let i = 0; i < this.ringSprites.length; i++) {
       const g = this.ringSprites[i]!;
       if (!g.visible) continue;
+      if (t && t.rings[i] && (t.rings[i]!.x < minX || t.rings[i]!.x > maxX)) continue;
       const k = 1 + Math.sin(tSec * 3.2 + i * 1.7) * 0.08;
       g.scale.set(k);
       g.rotation = Math.sin(tSec * 1.4 + i) * 0.12;
@@ -581,12 +593,14 @@ export class WorldView {
     // 重力门漩涡
     for (let i = 0; i < this.portalSprites.length; i++) {
       const pt = this.portalSprites[i]!;
+      if (t && t.portals[i] && (t.portals[i]!.x < minX || t.portals[i]!.x > maxX)) continue;
       pt.scale.set(1 + Math.sin(tSec * 4 + i) * 0.06);
     }
     // 护盾星
     for (let i = 0; i < this.shieldSprites.length; i++) {
       const sh = this.shieldSprites[i]!;
       if (!sh.visible) continue;
+      if (t && t.shields[i] && (t.shields[i]!.x < minX || t.shields[i]!.x > maxX)) continue;
       sh.rotation += 0.04;
       sh.scale.set(1 + Math.sin(tSec * 3.5 + i) * 0.1);
     }
@@ -594,21 +608,24 @@ export class WorldView {
     for (let i = 0; i < this.magnetSprites.length; i++) {
       const mg = this.magnetSprites[i]!;
       if (!mg.visible) continue;
+      if (t && t.magnets[i] && (t.magnets[i]!.x < minX || t.magnets[i]!.x > maxX)) continue;
       mg.scale.set(1 + Math.sin(tSec * 4 + i) * 0.12);
     }
     // 弹跳菇呼吸
     for (let i = 0; i < this.padCaps.length; i++) {
       const cap = this.padCaps[i]!;
+      if (t && t.pads[i] && (t.pads[i]!.x + t.pads[i]!.w < minX || t.pads[i]!.x > maxX)) continue;
       const k = 1 + Math.sin(tSec * 4.2 + i * 0.9) * 0.06;
       cap.scale.set(k, 2 - k);
     }
     // 终点旗飘动
-    if (this.flagCloth) {
+    if (this.flagCloth && t && (t.finishX >= minX && t.finishX <= maxX + 200)) {
       this.flagCloth.skew.y = Math.sin(tSec * 5.4) * 0.18;
       this.flagCloth.scale.x = 0.9 + Math.sin(tSec * 3.2) * 0.06;
     }
     // 加速带箭头向右滚动
     for (const b of this.boostFx) {
+      if (b.zx + b.zw < minX || b.zx > maxX) continue;
       const offset = (tSec * 160) % 44;
       for (let i = 0; i < b.chevrons.length; i++) {
         const ch = b.chevrons[i]!;
@@ -620,6 +637,7 @@ export class WorldView {
     // 气流柱向上飘动的气流粒子线
     for (let i = 0; i < this.windStreams.length; i++) {
       const ws = this.windStreams[i]!;
+      if (ws.x + ws.w < minX || ws.x > maxX) continue;
       const g = ws.g;
       g.clear();
       const n = 6;
