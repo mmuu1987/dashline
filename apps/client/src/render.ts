@@ -1,6 +1,5 @@
 /**
- * 渲染编排器：背景视差 → 赛道静态对象 → Ghost → 拖尾 → 玩家 → 粒子 → 暗角。
- * 对 main.ts 保持与旧版相同的公开 API。
+ * 渲染编排器：背景视差 → 赛道静态对象 → 拖尾 → 玩家 → 粒子 → 暗角。
  */
 import { Container, Sprite } from 'pixi.js';
 import { PLAYER_R, GROUND_Y, type Track, type WorldSnapshot } from '@dashline/core';
@@ -20,12 +19,11 @@ export class GameView {
   readonly fx: Particles;
 
   private shakeWrap = new Container();
-  /** 相机容器：赛道 / Ghost / 粒子 / 玩家都在世界坐标系里，整体平移 -camX */
+  /** 相机容器：赛道 / 粒子 / 玩家都在世界坐标系里，整体平移 -camX */
   private camera = new Container();
   private bg: Background;
   private worldView: WorldView;
   private player: BallActor;
-  private ghost: BallActor;
   private vignette: Sprite;
   private camX = 0;
   private shakeAmp = 0;
@@ -36,15 +34,13 @@ export class GameView {
   constructor(assets: GameAssets, themeId = 0) {
     this.worldView = new WorldView(assets);
     this.bg = new Background(assets, themeId);
-    this.player = new BallActor(assets, false, (x, y) => this.worldView.surfaceYBelow(x, y));
-    this.ghost = new BallActor(assets, true);
+    this.player = new BallActor(assets, (x, y) => this.worldView.surfaceYBelow(x, y));
     this.fx = new Particles(assets);
     this.vignette = new Sprite(assets.vignette);
 
     // 背景自己做视差（直接吃 camX），其余世界对象统一挂进相机容器
     this.camera.addChild(
       this.worldView.root,
-      this.ghost.root,
       this.fx.root,
       this.player.root,
     );
@@ -131,7 +127,7 @@ export class GameView {
     this.trailT = 0;
   }
 
-  sync(snap: WorldSnapshot, ghostSnap: WorldSnapshot | null, tSec: number): void {
+  sync(snap: WorldSnapshot, tSec: number): void {
     const dt = Math.min(0.05, Math.max(0.001, tSec - this.lastT));
     this.lastT = tSec;
 
@@ -146,13 +142,6 @@ export class GameView {
     this.worldView.update(tSec, this.camX);
 
     this.player.setState(snap);
-
-    if (ghostSnap) {
-      this.ghost.root.visible = true;
-      this.ghost.setState(ghostSnap);
-    } else {
-      this.ghost.root.visible = false;
-    }
 
     // 冲刺拖尾（存活且移动时；加速期间换金色）
     if (snap.alive && !snap.finished) {

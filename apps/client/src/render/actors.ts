@@ -40,7 +40,6 @@ export class BallActor {
 
   constructor(
     private assets: GameAssets,
-    private ghostMode: boolean,
     getSurfaceY?: (x: number, fromY: number) => number | null,
   ) {
     const r = PLAYER_R;
@@ -52,8 +51,8 @@ export class BallActor {
     this.aura = new Sprite(assets.glow);
     this.aura.anchor.set(0.5);
     this.aura.scale.set((r * 3.2) / 128);
-    this.aura.tint = ghostMode ? 0xaab6d8 : 0x38bdf8;
-    this.aura.alpha = ghostMode ? 0.15 : 0.45;
+    this.aura.tint = 0x38bdf8;
+    this.aura.alpha = 0.45;
     this.aura.blendMode = 'add';
     this.root.addChild(this.aura);
 
@@ -61,10 +60,6 @@ export class BallActor {
     this.roller = new Sprite(assets.ball);
     this.roller.anchor.set(0.5);
     this.roller.scale.set((r * 2.1) / this.roller.texture.width);
-    if (ghostMode) {
-      this.roller.tint = 0xaab6d8;
-      this.roller.alpha = 0.38;
-    }
     this.root.addChild(this.roller);
 
     // 3. 萌系耳饰组件
@@ -121,7 +116,6 @@ export class BallActor {
     this.deadFace.visible = false;
     this.face.addChild(this.deadFace);
 
-    if (ghostMode) this.face.alpha = 0.4;
     this.root.addChild(this.face);
 
     // 5. 环体护盾水晶光罩（拾取护盾后出现）
@@ -136,17 +130,15 @@ export class BallActor {
     this.shadow.anchor.set(0.5);
     this.shadow.tint = 0x000000;
     this.shadow.alpha = 0;
-    if (!ghostMode && getSurfaceY) {
+    if (getSurfaceY) {
       this.getSurfaceY = getSurfaceY;
       this.root.addChildAt(this.shadow, 0);
     }
 
     // 7. 蓄力光环
-    if (!ghostMode) {
-      this.chargeRing = new Graphics();
-      this.chargeRing.visible = false;
-      this.root.addChild(this.chargeRing);
-    }
+    this.chargeRing = new Graphics();
+    this.chargeRing.visible = false;
+    this.root.addChild(this.chargeRing);
   }
 
   private rebuildEars(type: 'spirit' | 'fox' | 'cat' | 'mecha', primaryCol: number, secondaryCol: number): void {
@@ -234,9 +226,9 @@ export class BallActor {
     const isBoost = (snap.boost ?? 0) > 0;
     const skin = this.currentSkin;
     const pCol = skin ? skin.primaryColor : 0x38bdf8;
-    this.roller.tint = isBoost ? 0xfef08a : this.ghostMode ? 0xaab6d8 : 0xffffff;
-    this.aura.tint = isBoost ? 0xfde047 : this.ghostMode ? 0xaab6d8 : pCol;
-    this.aura.alpha = (this.ghostMode ? 0.15 : 0.4) + Math.sin(this.animT * 2) * 0.08;
+    this.roller.tint = isBoost ? 0xfef08a : 0xffffff;
+    this.aura.tint = isBoost ? 0xfde047 : pCol;
+    this.aura.alpha = 0.4 + Math.sin(this.animT * 2) * 0.08;
 
     // 护盾光罩旋转
     this.shieldBarrier.visible = snap.hasShield && snap.alive;
@@ -265,7 +257,7 @@ export class BallActor {
     this.earR.rotation = 0.28 + earBob + vyFactor * 0.3;
 
     // 5. 皮肤专属拖尾绘制
-    if (!this.ghostMode && snap.alive) {
+    if (snap.alive) {
       this.trailG.clear();
       const sY = -PLAYER_R * 0.2;
       const sX = -PLAYER_R * 0.7;
@@ -340,7 +332,7 @@ export class BallActor {
     }
 
     // 7. 死亡与表情切换
-    const isDead = !snap.alive && !this.ghostMode;
+    const isDead = !snap.alive;
     this.deadFace.visible = isDead;
     this.eyeL.visible = !isDead;
     this.eyeR.visible = !isDead;

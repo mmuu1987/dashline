@@ -5,9 +5,8 @@
  * 2. 模拟真实键盘 / 触控点按跳跃与长按蓄力
  * 3. 经历撞毁 -> 观察闪屏与结算面板
  * 4. 点击"再跑一次"重开第二局，验证连胜/今日最佳状态机
- * 5. 打开排行榜弹窗，验证榜单数据与 Ghost 按钮
- * 6. 测试静音与音频解锁
- * 7. 保存全流程关键视觉截图
+ * 5. 验证衣橱、成就、天赋和暂停等单机界面
+ * 6. 测试静音与音频解锁并保存关键截图
  */
 import { chromium, type Browser, type Page } from 'playwright';
 import { spawn, type ChildProcess } from 'child_process';
@@ -33,32 +32,26 @@ async function waitHttp(url: string, timeoutMs = 15000): Promise<boolean> {
 async function runHumanTest(): Promise<void> {
   console.log('=== 启动真人式浏览器自动化交互测试 ===\n');
 
-  let apiProc: ChildProcess | null = null;
   let clientProc: ChildProcess | null = null;
   let browser: Browser | null = null;
 
   try {
-    // 1. 启动 API 后端与 Vite 客户端
-    console.log('[1/7] 正在启动后台 API 与 Vite 客户端服务...');
-    apiProc = spawn('pnpm', ['--filter', '@dashline/api', 'start'], {
-      shell: true,
-      stdio: 'pipe',
-    });
+    // 1. 启动纯静态 Vite 客户端
+    console.log('[1/6] 正在启动 Vite 单机客户端...');
     clientProc = spawn('pnpm', ['--filter', '@dashline/client', 'dev', '--port', '5173', '--strictPort'], {
       shell: true,
       stdio: 'pipe',
     });
 
-    const apiReady = await waitHttp('http://127.0.0.1:8787/v1/health');
     const clientReady = await waitHttp('http://localhost:5173');
 
-    if (!apiReady || !clientReady) {
-      throw new Error(`服务启动超时: API=${apiReady}, Client=${clientReady}`);
+    if (!clientReady) {
+      throw new Error('客户端启动超时');
     }
-    console.log('✓ API 服务已就绪 (:8787)，客户端服务已就绪 (:5173)');
+    console.log('✓ 单机客户端已就绪 (:5173)');
 
     // 2. 启动真实 Chromium 浏览器
-    console.log('[2/7] 正在启动 Chromium 浏览器并打开游戏页面...');
+    console.log('[2/6] 正在启动 Chromium 浏览器并打开游戏页面...');
     browser = await chromium.launch({
       headless: true, // 可在无头环境下精准渲染 WebGL
       args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-webgl'],
@@ -81,7 +74,7 @@ async function runHumanTest(): Promise<void> {
     await page.goto('http://localhost:5173', { waitUntil: 'commit' });
 
     // 3. 验证 Canvas 与 HUD 初始状态
-    console.log('[3/7] 验证 WebGL Canvas 与 HUD 渲染...');
+    console.log('[3/6] 验证 WebGL Canvas 与 HUD 渲染...');
     const canvas = await page.waitForSelector('canvas.game-canvas');
     if (!canvas) throw new Error('Canvas 未找到');
 
@@ -89,7 +82,7 @@ async function runHumanTest(): Promise<void> {
     console.log(`✓ 初始 HUD 状态: "${metaText.replace(/\n/g, ' | ')}"`);
 
     // 4. 第一局：模拟真人点按与长按跳跃
-    console.log('[4/7] 模拟真人第 1 局游戏操作（单指操作跑酷）...');
+    console.log('[4/6] 模拟真人第 1 局游戏操作（单指操作跑酷）...');
     // 人眼观察 0.5s
     await page.waitForTimeout(500);
 
@@ -120,23 +113,8 @@ async function runHumanTest(): Promise<void> {
     await page.screenshot({ path: crashPicPath });
     console.log(`✓ 截图已保存: ${crashPicPath}`);
 
-    // 5. 交互测试：查看排行榜弹窗并关闭返回结算面板
-    console.log('[5/10] 模拟真人点击结算面板 [榜单] 按钮...');
-    const boardBtn = page.locator('#btn-board');
-    if (await boardBtn.isVisible()) {
-      await boardBtn.click();
-      await page.waitForTimeout(400);
-      const boardPicPath = path.join(SCREENSHOT_DIR, 'human_test_03_board.png');
-      await page.screenshot({ path: boardPicPath });
-      console.log(`✓ 榜单面板截图已保存: ${boardPicPath}`);
-
-      console.log('  -> 模拟真人点击榜单 [关闭] 按钮返回结算面板...');
-      await page.click('#btn-bclose', { force: true });
-      await page.waitForTimeout(400);
-    }
-
-    // 6. 第二局：模拟真人点击结算面板 [再跑一次] 按钮
-    console.log('[6/10] 模拟真人点击 [再跑一次] 按钮快速重开...');
+    // 5. 第二局：模拟真人点击结算面板 [再跑一次] 按钮
+    console.log('[5/6] 模拟真人点击 [再跑一次] 按钮快速重开...');
     const retryBtn = page.locator('#btn-retry');
     if (await retryBtn.isVisible()) {
       await retryBtn.click();
@@ -149,7 +127,7 @@ async function runHumanTest(): Promise<void> {
     console.log(`✓ 重开成功，当前 HUD: "${round2Meta.replace(/\n/g, ' | ')}"`);
 
     // 6. 交互测试：查看外观衣橱弹窗
-    console.log('[6/9] 模拟真人点击 [外观衣橱] 按钮...');
+    console.log('[6/6] 验证外观、成就、天赋、暂停和音频界面...');
     const wardrobeBtn = page.locator('#btn-wardrobe');
     await wardrobeBtn.click();
     await page.waitForTimeout(400);
@@ -161,7 +139,6 @@ async function runHumanTest(): Promise<void> {
     await page.waitForTimeout(300);
 
     // 7. 交互测试：查看荣誉成就弹窗
-    console.log('[7/10] 模拟真人点击 [荣誉成就] 按钮...');
     const achBtn = page.locator('#btn-achievements');
     await achBtn.click();
     await page.waitForTimeout(400);
@@ -173,7 +150,6 @@ async function runHumanTest(): Promise<void> {
     await page.waitForTimeout(300);
 
     // 8. 交互测试：查看单机离线天赋强化弹窗
-    console.log('[8/10] 模拟真人点击 [天赋强化] 按钮...');
     const talentsBtn = page.locator('#btn-talents');
     await talentsBtn.click();
     await page.waitForTimeout(400);
@@ -185,7 +161,6 @@ async function runHumanTest(): Promise<void> {
     await page.waitForTimeout(300);
 
     // 9. 交互测试：纯净定格暂停
-    console.log('[9/10] 模拟真人点击暂停按钮与按 P 键暂停...');
     const pauseBtn = page.locator('#btn-pause');
     await pauseBtn.click();
     await page.waitForTimeout(300);
@@ -204,7 +179,6 @@ async function runHumanTest(): Promise<void> {
     console.log('✓ 恢复游戏运行');
 
     // 9. 交互测试：音频开关
-    console.log('[9/9] 模拟真人点击静音切换按钮...');
     const muteBtn = page.locator('#btn-mute');
     const initMute = await muteBtn.innerText();
     await muteBtn.click();
@@ -227,7 +201,6 @@ async function runHumanTest(): Promise<void> {
         }
       } catch {}
     };
-    killTree(apiProc?.pid);
     killTree(clientProc?.pid);
   }
 }

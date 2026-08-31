@@ -6,12 +6,10 @@
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "dev": "pnpm --filter @dashline/client dev",
-    "dev:api": "pnpm --filter @dashline/api dev",
     "build": "pnpm --filter @dashline/client build",
     "preview": "pnpm --filter @dashline/client preview",
     "test": "vitest run",
     "test:browser": "tsx scripts/browser-human-test.ts",
-    "test:seeds": "pnpm --filter @dashline/api exec tsx scripts/test-multi-seeds.ts",
     "pages:deploy": "tsx scripts/deploy-pages.ts"
   },
   "devDependencies": {

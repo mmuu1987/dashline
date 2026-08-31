@@ -2,7 +2,7 @@
  * 元游戏（Meta Loop）：连胜（Streak）与近 7 天历史成绩归档。
  * 纯客户端 localStorage 持久化，离线也能追踪个人打卡与进步曲线。
  */
-import { lsGet, lsSet } from './net.js';
+import { lsGet, lsSet } from './storage.js';
 
 const KEY_HISTORY = 'dl_history_v1';
 const KEY_STREAK = 'dl_streak_v1';
@@ -88,4 +88,3 @@ export function getRecentHistory(todayDateStr: string, count = 7): DayRecord[] {
   }
   return list;
 }
-

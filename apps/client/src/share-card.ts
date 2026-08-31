@@ -13,9 +13,6 @@ export interface ShareCardData {
   score: number;
   coins: number;
   attempts: number;
-  /** 如 "🟢 快过 跑者xxxx 0.42s！" */
-  beatText: string | null;
-  url: string;
 }
 
 const W = 1200;
@@ -120,16 +117,6 @@ export function renderShareCard(assets: GameAssets, d: ShareCardData): HTMLCanva
     420,
   );
 
-  if (d.beatText) {
-    g.font = '700 32px system-ui, sans-serif';
-    const tw = g.measureText(d.beatText).width + 44;
-    roundRect(g, 116, 456, tw, 56, 28);
-    g.fillStyle = d.beatText.startsWith('🟢') ? 'rgba(61,165,90,0.35)' : 'rgba(190,70,80,0.35)';
-    g.fill();
-    g.fillStyle = '#ffffff';
-    g.fillText(d.beatText, 138, 485);
-  }
-
   // ---- 右侧主角装饰：光晕 + 球 ----
   const glow = g.createRadialGradient(900, 330, 20, 900, 330, 230);
   glow.addColorStop(0, 'rgba(255,210,63,0.35)');
@@ -143,20 +130,20 @@ export function renderShareCard(assets: GameAssets, d: ShareCardData): HTMLCanva
   g.restore();
   g.drawImage(srcOf(assets.gemFrames[1]!), 1020, 190, 84, 84);
 
-  // ---- 底部挑战横幅 ----
+  // ---- 底部单机模式横幅 ----
   roundRect(g, 0, H - 104, W, 104, 0);
   g.fillStyle = 'rgba(6,9,17,0.82)';
   g.fillRect(0, H - 104, W, 104);
   g.font = '800 38px system-ui, sans-serif';
   g.fillStyle = '#ffffff';
-  g.fillText('敢来超我吗？', 72, H - 52);
-  g.font = '600 30px ui-monospace, monospace';
+  g.fillText('纯单机 · 每日新赛道', 72, H - 52);
+  g.font = '600 30px system-ui, sans-serif';
   g.fillStyle = '#ffd23f';
-  g.fillText(d.url.replace(/^https?:\/\//, ''), 360, H - 52);
+  g.fillText('挑战今天的自己', 500, H - 52);
   g.font = '500 22px system-ui, sans-serif';
   g.fillStyle = 'rgba(255,255,255,0.62)';
   g.textAlign = 'right';
-  g.fillText('每天全世界同一张图 · 输入流挑战', W - 60, H - 52);
+  g.fillText('进度仅保存在本机', W - 60, H - 52);
 
   return cv;
 }

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  encodeInputs,
-  decodeInputs,
-  makeInput,
-  splitmix32,
-} from '@dashline/shared';
+import { makeInput, splitmix32 } from '@dashline/shared';
 import { buildTrack, createWorld, type WorldSnapshot } from '../src/index.js';
 
 const SEED = 12345n;
@@ -24,20 +19,6 @@ function scriptedInputs(seed: number, ticks: number): Uint8Array {
     }
   }
   return out;
-}
-
-/** 拟真输入流：长静默 + 短按住，接近真人节奏（压缩友好） */
-function realisticInputs(ticks: number): Uint8Array {
-  const r = splitmix32(2024);
-  const out: number[] = [];
-  while (out.length < ticks) {
-    const idle = 30 + Math.floor(r() * 120);
-    for (let i = 0; i < idle && out.length < ticks; i++) out.push(makeInput(false, false));
-    out.push(makeInput(true, true)); // 按下边沿
-    const hold = 10 + Math.floor(r() * 15);
-    for (let i = 0; i < hold && out.length < ticks; i++) out.push(makeInput(false, true));
-  }
-  return Uint8Array.from(out.slice(0, ticks));
 }
 
 function runWorld(
@@ -89,26 +70,6 @@ describe('确定性（架构地基）', () => {
       a.snap.alive === b.snap.alive &&
       a.snap.finished === b.snap.finished;
     expect(same).toBe(false);
-  });
-});
-
-describe('codec 回环', () => {
-  it('拟真输入流：encode→decode 还原，且一局压到几百字节内', () => {
-    const bytes = realisticInputs(3600);
-    const encoded = encodeInputs(bytes);
-    expect(encoded.length).toBeLessThan(400);
-    expect(Array.from(decodeInputs(encoded))).toEqual(Array.from(bytes));
-  });
-
-  it('对抗性高频流也能无损回环（不保证压缩率）', () => {
-    const r = splitmix32(4242);
-    const bytes = Uint8Array.from({ length: 3600 }, () => (r() < 0.9 ? 0 : 3));
-    expect(Array.from(decodeInputs(encodeInputs(bytes)))).toEqual(Array.from(bytes));
-  });
-
-  it('全零流被压到极小', () => {
-    const encoded = encodeInputs(new Uint8Array(3600));
-    expect(encoded.length).toBeLessThan(12);
   });
 });
 

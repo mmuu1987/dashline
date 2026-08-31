@@ -81,7 +81,7 @@
         background: #4fc3f7; color: #08222e; font-weight: 600;
         transition: transform .1s, background .15s;
       }
-      button.ghost-btn { background: #2a3040; color: #cfd8ea; }
+      button.secondary-btn { background: #2a3040; color: #cfd8ea; }
       button:active { transform: translateY(1px); }
       #toast {
         position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%);
@@ -98,25 +98,11 @@
         opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       }
       #combo-tag.pop { opacity: 1; transform: translateX(-50%) scale(1.15); }
-      /* ---- 榜单 / 衣橱 / 成就列表 ---- */
-      .board-list {
-        max-height: 46vh; overflow-y: auto;
-        display: flex; flex-direction: column; gap: 6px;
-        margin: 10px 0 4px; padding-right: 4px;
-      }
-      .brow {
-        display: flex; align-items: center; gap: 10px;
-        background: #1e2432; border-radius: 8px;
-        padding: 8px 12px; font-size: 14px;
-      }
-      .brow .bk { width: 30px; text-align: center; flex-shrink: 0; }
-      .brow .bn { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .brow .bt { color: #8fd3ff; font-variant-numeric: tabular-nums; }
+      /* ---- 衣橱 / 成就 / 天赋列表 ---- */
       .race-btn {
         padding: 4px 10px; font-size: 12px; border-radius: 8px;
         background: #ffd23f; color: #4a3608; font-weight: 700;
       }
-      .my-line { margin-top: 6px; color: #ffd23f !important; }
       /* ---- 皮肤卡片 ---- */
       .skin-grid {
         display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;

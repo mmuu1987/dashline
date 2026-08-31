@@ -8,20 +8,9 @@ export interface ResultData {
   score: number;
   coins: number;
   streak?: number;
-  ghostDelta: string | null;
   onRetry: () => void;
   onCard: () => void;
-  onShare: () => void;
-  onBoard: () => void;
   onTalents?: () => void;
-}
-
-export interface BoardRow {
-  rank: number;
-  nickname: string;
-  timeMs: number | null;
-  score: number;
-  raceable: boolean;
 }
 
 export class Hud {
@@ -60,10 +49,9 @@ export class Hud {
     }
   }
 
-  setMeta(attempts: number, bestText: string, opponent?: string, streak?: number): void {
+  setMeta(attempts: number, bestText: string, streak?: number): void {
     const streakBadge = streak && streak > 0 ? ` · 🔥 ${streak}连胜` : '';
-    this.meta.textContent =
-      `尝试 #${attempts}${streakBadge}\n今日最佳 ${bestText}` + (opponent ? `\n${opponent}` : '');
+    this.meta.textContent = `尝试 #${attempts}${streakBadge}\n今日最佳 ${bestText}`;
   }
 
   setMode(text: string): void {
@@ -85,59 +73,24 @@ export class Hud {
   showResult(d: ResultData): void {
     const title = d.finished ? '🏁 完赛！' : '💥 撞毁了…';
     const time = d.finished ? `⏱ 用时 <b>${(d.timeMs / 1000).toFixed(2)}s</b>` : `📏 距离 <b>${Math.floor(d.score / 100)}m</b>`;
-    const ghost = d.ghostDelta ? `<div class="row">${d.ghostDelta}</div>` : '';
     const streakTag = d.streak && d.streak > 0 ? ` · 🔥 ${d.streak}天连胜` : '';
     this.panel.innerHTML = `
       <h2>${title}</h2>
       <div class="big">${(d.finished ? d.timeMs / 1000 : d.score).toLocaleString?.() ?? ''}${d.finished ? ' s' : ' 分'}</div>
       <div class="row">${time} · 🪙 ${d.coins}${streakTag}</div>
-      ${ghost}
       <div class="btns">
         <button id="btn-retry">再跑一次</button>
         <button id="btn-talents-res" class="race-btn">⚡ 天赋强化</button>
-        <button id="btn-card" class="ghost-btn">📸 战报</button>
-        <button id="btn-board" class="ghost-btn">榜单</button>
+        <button id="btn-card" class="secondary-btn">📸 战报</button>
       </div>`;
     document.getElementById('btn-retry')!.onclick = d.onRetry;
     if (d.onTalents && document.getElementById('btn-talents-res')) {
       document.getElementById('btn-talents-res')!.onclick = d.onTalents;
     }
     document.getElementById('btn-card')!.onclick = d.onCard;
-    document.getElementById('btn-board')!.onclick = d.onBoard;
     this.resultEl.onclick = (e) => {
       if (e.target === this.resultEl) d.onRetry();
     };
-    this.resultEl.classList.add('show');
-  }
-
-  showBoard(
-    rows: BoardRow[],
-    myLine: string | null,
-    onRace: (index: number) => void,
-    onClose: () => void,
-  ): void {
-    this.resultEl.onclick = null;
-    const list = rows.length
-      ? rows
-          .map((r, i) => {
-            const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `${r.rank}`;
-            const t = r.timeMs !== null ? `${(r.timeMs / 1000).toFixed(2)}s` : `${Math.floor(r.score / 100)}m`;
-            const btn = r.raceable
-              ? `<button class="race-btn" data-i="${i}">⚔ 挑战</button>`
-              : '';
-            return `<div class="brow"><span class="bk">${medal}</span><span class="bn">${r.nickname}</span><span class="bt">${t}</span>${btn}</div>`;
-          })
-          .join('')
-      : '<div class="row" style="opacity:.6">今日还没有人上榜，来当第一人！</div>';
-    this.panel.innerHTML = `
-      <h2>🏆 今日榜单</h2>
-      <div class="board-list">${list}</div>
-      ${myLine ? `<div class="row my-line">${myLine}</div>` : ''}
-      <div class="btns"><button id="btn-bclose">关闭</button></div>`;
-    for (const b of Array.from(this.panel.querySelectorAll<HTMLButtonElement>('.race-btn'))) {
-      b.onclick = () => onRace(Number(b.dataset.i));
-    }
-    document.getElementById('btn-bclose')!.onclick = onClose;
     this.resultEl.classList.add('show');
   }
 
@@ -153,7 +106,7 @@ export class Hud {
       .map((s) => {
         const isEquipped = s.id === currentId;
         const btnText = isEquipped ? '已装备' : s.unlocked ? '装备' : `🪙 ${s.price} 解锁`;
-        const btnClass = isEquipped ? 'ghost-btn' : s.unlocked ? '' : 'race-btn';
+        const btnClass = isEquipped ? 'secondary-btn' : s.unlocked ? '' : 'race-btn';
         return `
           <div class="skin-card ${isEquipped ? 'active' : ''}">
             <div class="s-name">${s.name}</div>
@@ -217,7 +170,7 @@ export class Hud {
         const curCost = isMax ? null : t.costs[t.level];
         const canAfford = curCost !== null && totalCoins >= curCost;
         const btnText = isMax ? '已满级' : `🪙 ${curCost} 升级`;
-        const btnClass = isMax ? 'ghost-btn' : canAfford ? 'race-btn' : 'ghost-btn';
+        const btnClass = isMax ? 'secondary-btn' : canAfford ? 'race-btn' : 'secondary-btn';
         const levelStars = '★'.repeat(t.level) + '☆'.repeat(t.maxLevel - t.level);
         const curEffect = t.level > 0 ? t.effects[t.level - 1] : '未激活';
         const nextEffect = !isMax ? `<div style="color:#38bdf8;font-size:11px;margin-top:2px;">下级: ${t.effects[t.level]}</div>` : '';
@@ -249,10 +202,6 @@ export class Hud {
     }
     document.getElementById('btn-tclose')!.onclick = onClose;
     this.resultEl.classList.add('show');
-  }
-
-  hideBoard(): void {
-    this.hideResult();
   }
 
   hideResult(): void {

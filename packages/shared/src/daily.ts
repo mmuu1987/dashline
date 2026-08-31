@@ -1,13 +1,13 @@
 import { CORE_VERSION } from './constants.js';
 import { fnv1a } from './prng.js';
 
-/** UTC 日切日期串 yyyy-mm-dd（榜单/种子的全局口径） */
+/** UTC 日切日期串 yyyy-mm-dd（每日赛道的统一口径） */
 export function todayUTC(d: Date = new Date()): string {
   return d.toISOString().slice(0, 10);
 }
 
 /** 日期字符串 → 稳定的大种子（全球同图的关键）。
- *  掺入 CORE_VERSION：赛道生成逻辑升级后同一天自动换图，新旧成绩互不可比。 */
+ *  掺入 CORE_VERSION：赛道生成逻辑升级后同一天自动换图。 */
 export function seedForDate(date: string): bigint {
   return BigInt(fnv1a('dashline:' + CORE_VERSION + ':' + date));
 }

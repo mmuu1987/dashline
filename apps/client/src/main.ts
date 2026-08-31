@@ -1,6 +1,6 @@
 /**
  * 客户端主循环 —— 固定步长逻辑 + 渲染（60Hz rAF）。
- * 职责：装配 core/输入/渲染/HUD/音频/网络/衣橱/成就，维护"尝试"状态机与 Ghost 对手选择。
+ * 职责：装配 core/输入/渲染/HUD/音频/衣橱/成就，维护本地单机状态。
  */
 import { Application } from 'pixi.js';
 import {
@@ -12,31 +12,12 @@ import {
   type SimEvent,
   type World,
 } from '@dashline/core';
-import {
-  CORE_VERSION,
-  decodeInputs,
-  encodeInputs,
-  seedForDate,
-  themeForSeed,
-  todayUTC,
-  type RunPayload,
-} from '@dashline/shared';
+import { seedForDate, themeForSeed, todayUTC } from '@dashline/shared';
 import { Sfx } from './audio.js';
 import { Hud } from './hud.js';
 import { InputBuffer } from './input.js';
 import { calculateStreak, saveDayRecord } from './meta.js';
-import {
-  fetchBoard,
-  fetchGhosts,
-  lsGet,
-  lsSet,
-  probeApi,
-  registerDevice,
-  submitRun,
-  type AuthInfo,
-  type BoardEntry,
-  type GhostOffer,
-} from './net.js';
+import { lsGet, lsSet } from './storage.js';
 import { GameView, VIEW_H, VIEW_W } from './render.js';
 import { THEMES } from './render/background.js';
 import { loadAssets } from './render/textures.js';
@@ -63,19 +44,6 @@ interface BestRecord {
   coins: number;
   distanceM: number;
   finished: boolean;
-  inputsB64: string;
-}
-
-interface FriendChallenge {
-  inputsB64: string;
-  name: string;
-  timeMs: number | null;
-}
-
-interface Racer {
-  label: string;
-  bytes: Uint8Array | null;
-  timeMs: number | null;
 }
 
 type Phase = 'run' | 'dead' | 'done' | 'pause';
@@ -104,7 +72,7 @@ async function boot(): Promise<void> {
   const dateStr = todayUTC();
   const seed = seedForDate(dateStr);
   const themeId = themeForSeed(seed);
-  const ghostKey = `dl_best_${dateStr}`;
+  const bestKey = `dl_best_${dateStr}`;
   let streak = calculateStreak(dateStr);
 
   const view = new GameView(assets, themeId);
@@ -225,122 +193,21 @@ async function boot(): Promise<void> {
   let attempts = 0;
   let deadUntil = 0;
   let world: World = createWorld(seed, talents.getPerksConfig());
-  let recorder: number[] = [];
   let best: BestRecord | null = null;
   let usedShieldInRun = false;
   let nearMissCountInRun = 0;
 
   try {
-    const raw = lsGet(ghostKey);
+    const raw = lsGet(bestKey);
     if (raw) best = JSON.parse(raw) as BestRecord;
   } catch {
     best = null;
   }
 
-  // ---- 好友复仇 URL 参数解析 ----
-  function parseFriendChallenge(): FriendChallenge | null {
-    try {
-      const hash = location.hash.slice(1);
-      if (!hash) return null;
-      const params = new URLSearchParams(hash);
-      const g = params.get('g');
-      if (!g) return null;
-      const name = params.get('n') || '好友';
-      const t = params.get('t');
-      return {
-        inputsB64: g,
-        name: decodeURIComponent(name),
-        timeMs: t ? parseInt(t, 10) : null,
-      };
-    } catch {
-      return null;
-    }
-  }
-  const friendChallenge = parseFriendChallenge();
-  if (friendChallenge) {
-    hud.toast(`⚔ 接受来自【${friendChallenge.name}】的复仇挑战！`);
-  }
-
-  // ---- 网络：探测 API 与注册设备 ----
-  let auth: AuthInfo | null = null;
-  let apiOnline = false;
-  let ghostOffers: GhostOffer[] = [];
-  let forcedOffer: GhostOffer | null = null;
-
-  void (async () => {
-    apiOnline = await probeApi();
-    hud.setMode(apiOnline ? '在线模式 · 榜单已连接' : '单机模式');
-    if (apiOnline) {
-      auth = await registerDevice();
-      const offers = await fetchGhosts(dateStr);
-      if (offers) ghostOffers = offers;
-    }
-  })();
-
-  // ---- Ghost 对手分配 ----
-  let racer: Racer = { label: '', bytes: null, timeMs: null };
-  let racerWorld: World = createWorld(seed);
-  let racerIdx = 0;
-  let racerDone = true;
-  let startLabel = '';
-  let startTimeMs: number | null = null;
-  let lastDelta: string | null = null;
+  hud.setMode('纯单机模式');
 
   function fmtBest(b: BestRecord): string {
     return b.finished ? `${(b.timeMs / 1000).toFixed(2)}s` : `${b.distanceM}m`;
-  }
-
-  function armRacer(): void {
-    if (friendChallenge) {
-      try {
-        racer = {
-          label: `⚔ ${friendChallenge.name}`,
-          bytes: decodeInputs(friendChallenge.inputsB64),
-          timeMs: friendChallenge.timeMs,
-        };
-      } catch {
-        racer = { label: '', bytes: null, timeMs: null };
-      }
-    } else if (forcedOffer) {
-      try {
-        racer = {
-          label: `⚔ ${forcedOffer.nickname}`,
-          bytes: decodeInputs(forcedOffer.inputsB64),
-          timeMs: forcedOffer.timeMs,
-        };
-      } catch {
-        racer = { label: '', bytes: null, timeMs: null };
-      }
-    } else if (ghostOffers.length > 0 && ghostOffers[0]) {
-      const top = ghostOffers[0];
-      try {
-        racer = {
-          label: `👑 榜首 ${top.nickname}`,
-          bytes: decodeInputs(top.inputsB64),
-          timeMs: top.timeMs,
-        };
-      } catch {
-        racer = { label: '', bytes: null, timeMs: null };
-      }
-    } else if (best) {
-      try {
-        racer = { label: '🎯 你的最佳', bytes: decodeInputs(best.inputsB64), timeMs: best.timeMs };
-      } catch {
-        racer = { label: '', bytes: null, timeMs: null };
-      }
-    } else {
-      racer = { label: '', bytes: null, timeMs: null };
-    }
-
-    if (racer.bytes) {
-      racerWorld = createWorld(seed);
-      racerIdx = 0;
-      racerDone = false;
-    } else {
-      racerDone = true;
-    }
-    startLabel = racer.label;
-    startTimeMs = racer.timeMs;
   }
 
   function resetAttempt(): void {
@@ -348,16 +215,14 @@ async function boot(): Promise<void> {
     view.setTrack(world.track);
     view.resetCamera();
     view.resetAttemptFx(START_X, START_Y);
-    recorder = [];
     attempts++;
     usedShieldInRun = false;
     nearMissCountInRun = 0;
-    armRacer();
     phase = 'run';
     hud.hideResult();
     hud.showPause(false);
     pauseBtn.textContent = '⏸';
-    hud.setMeta(attempts, best ? fmtBest(best) : '--', racer.label || undefined, streak);
+    hud.setMeta(attempts, best ? fmtBest(best) : '--', streak);
   }
 
   input.onRestart(() => {
@@ -405,37 +270,14 @@ async function boot(): Promise<void> {
       coins: s.coinCount,
       distanceM: s.distanceM,
       finished: s.finished,
-      inputsB64: encodeInputs(Uint8Array.from(recorder)),
     };
     best = rec;
-    lsSet(ghostKey, JSON.stringify(rec));
+    lsSet(bestKey, JSON.stringify(rec));
     return rec;
   }
 
-  async function pushToApi(rec: BestRecord): Promise<void> {
-    if (!apiOnline || !auth || !rec.finished) return;
-    const payload: RunPayload = {
-      scope: 'daily',
-      date: dateStr,
-      score: rec.score,
-      finished: rec.finished,
-      timeMs: rec.timeMs,
-      distanceM: rec.distanceM,
-      coins: rec.coins,
-      attemptNo: attempts,
-      clientVersion: CORE_VERSION,
-      inputsB64: rec.inputsB64,
-    };
-    const ack = await submitRun(payload, auth);
-    if (ack.exhausted) {
-      hud.toast('今日计分次数已用完 · 继续练习模式');
-    } else if (ack.rank) {
-      hud.toast(`已上榜：第 ${ack.rank} / ${ack.total ?? '?'} 名${ack.attemptsLeft !== undefined ? ` · 剩 ${ack.attemptsLeft} 次` : ''}`);
-    }
-  }
-
   function commitAttempt(): void {
-    const rec = saveBestIfBetter();
+    saveBestIfBetter();
     const s = world.snapshot;
     if (s.score > 0) {
       saveDayRecord({
@@ -450,85 +292,19 @@ async function boot(): Promise<void> {
       });
       streak = calculateStreak(dateStr);
     }
-    hud.setMeta(attempts, best ? fmtBest(best) : '--', racer.label || undefined, streak);
-    if (rec) void pushToApi(rec);
-  }
-
-  function challengeUrl(): string {
-    const s = world.snapshot;
-    const b64 = encodeInputs(Uint8Array.from(recorder));
-    const name = encodeURIComponent(auth?.nickname ?? '神秘跑者');
-    const t = s.finished ? `&t=${s.timeMs}` : '';
-    return `${location.origin}${location.pathname}#g=${b64}&n=${name}${t}`;
-  }
-
-  function shareResult(): void {
-    const s = world.snapshot;
-    const text =
-      `🏁 Dashline ${dateStr}\n` +
-      (s.finished
-        ? `⏱ ${(s.timeMs / 1000).toFixed(2)}s  🪙 ${s.coinCount}`
-        : `📏 ${s.distanceM}m  🪙 ${s.coinCount}`) +
-      `\n敢来超我吗？👇\n${challengeUrl()}`;
-    void navigator.clipboard
-      ?.writeText(text)
-      .then(() => hud.toast('战绩+挑战链接已复制，甩到群里吧'))
-      .catch(() => hud.toast('复制失败（浏览器限制）'));
-  }
-
-  async function openBoard(): Promise<void> {
-    enterModal();
-    hud.toast('榜单加载中…');
-    const [entries, offers] = await Promise.all([fetchBoard(dateStr), fetchGhosts(dateStr)]);
-    if (offers) ghostOffers = offers;
-    const rows = (entries ?? []).map((e: BoardEntry) => ({
-      rank: e.rank,
-      nickname: e.nickname,
-      timeMs: e.timeMs,
-      score: e.score,
-      raceable: (offers ?? []).some(
-        (o) => o.nickname === e.nickname && o.timeMs === e.timeMs,
-      ),
-    }));
-    const myLine = best ? `我的最佳：${fmtBest(best)}` : null;
-    hud.showBoard(
-      rows,
-      myLine,
-      (i) => {
-        const offer = ghostOffers[i];
-        if (!offer) return;
-        forcedOffer = offer;
-        exitModal();
-        hud.toast(`将挑战 ${offer.nickname}（${(offer.timeMs / 1000).toFixed(2)}s）`);
-        resetAttempt();
-      },
-      exitModal,
-    );
+    hud.setMeta(attempts, best ? fmtBest(best) : '--', streak);
   }
 
   function showResultPanel(): void {
     const s = world.snapshot;
-    let delta: string | null = null;
-    if (startTimeMs !== null && s.finished) {
-      const d = s.timeMs - startTimeMs;
-      const who = startLabel.replace(/^[⚔👑🎯]\s*/, '');
-      delta =
-        d < 0
-          ? `🟢 快过 ${who} ${((-d) / 1000).toFixed(2)}s！`
-          : `🔴 慢于 ${who} ${(d / 1000).toFixed(2)}s`;
-    }
-    lastDelta = delta;
     hud.showResult({
       finished: s.finished,
       timeMs: s.timeMs,
       score: s.score,
       coins: s.coinCount,
       streak,
-      ghostDelta: delta,
       onRetry: () => resetAttempt(),
       onCard: () => void makeShareCard(),
-      onShare: shareResult,
-      onBoard: () => void openBoard(),
       onTalents: () => openTalents(),
     });
   }
@@ -545,8 +321,6 @@ async function boot(): Promise<void> {
         score: s.score,
         coins: s.coinCount,
         attempts,
-        beatText: lastDelta,
-        url: `${location.origin}${location.pathname}`,
       });
       const how = await exportShareCard(cv, `dashline-${dateStr}.png`);
       hud.toast(how === 'clipboard' ? '📸 战报图已复制，直接粘贴分享' : '📸 已下载战报图（剪贴板不可用）');
@@ -707,17 +481,7 @@ async function boot(): Promise<void> {
   function stepOnce(): void {
     const inp = input.poll();
     world.step(inp);
-    recorder.push(inp);
     handleEvents(world.takeEvents());
-    if (!racerDone && racer.bytes) {
-      if (racerIdx < racer.bytes.length) {
-        racerWorld.step(racer.bytes[racerIdx++]!);
-        const gs = racerWorld.snapshot;
-        if (!gs.alive || gs.finished) racerDone = true;
-      } else {
-        racerDone = true;
-      }
-    }
   }
 
   // ---- 固定步长主循环 ----
@@ -750,8 +514,7 @@ async function boot(): Promise<void> {
     }
 
     const snap = world.snapshot;
-    const ghostSnap = racerDone || !racer.bytes ? null : racerWorld.snapshot;
-    view.sync(snap, ghostSnap, now / 1000);
+    view.sync(snap, now / 1000);
     hud.update(snap.timeMs, snap.distanceM, snap.coinCount);
   });
 
