@@ -4,7 +4,7 @@ export const STEP_MS = 1000 / TICK_RATE;
 export const STEP_S = 1 / TICK_RATE;
 
 /** core 物理法则版本：参与每日种子，逻辑升级后自动生成新赛道。 */
-export const CORE_VERSION = 'core.9';
+export const CORE_VERSION = 'core.10';
 
 /** 输入位掩码（每 tick 1 字节） */
 export const IN_JUMP_PRESS = 1 << 0; // 边沿：本 tick 跳跃按下

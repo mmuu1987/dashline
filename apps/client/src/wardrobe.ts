@@ -4,6 +4,13 @@
  * 2. 4 款高品质萌系角色皮肤与专属拖尾解锁管理；
  * 3. 皮肤即时装备与全局响应。
  */
+import {
+  isRecord,
+  lsGet,
+  lsSet,
+  parseStoredJson,
+  toNonNegativeInteger,
+} from './storage.js';
 
 export interface SkinDef {
   id: string;
@@ -60,9 +67,11 @@ const DEFAULT_SKINS: Omit<SkinDef, 'unlocked'>[] = [
   },
 ];
 
-const LS_COINS_KEY = 'dl_total_coins';
-const LS_UNLOCKED_KEY = 'dl_unlocked_skins';
-const LS_EQUIPPED_KEY = 'dl_equipped_skin';
+const STORAGE_KEY = 'dl_wardrobe_v1';
+const LEGACY_COINS_KEY = 'dl_total_coins';
+const LEGACY_UNLOCKED_KEY = 'dl_unlocked_skins';
+const LEGACY_EQUIPPED_KEY = 'dl_equipped_skin';
+const VALID_SKIN_IDS = new Set(DEFAULT_SKINS.map((skin) => skin.id));
 
 export class Wardrobe {
   private totalCoins = 0;
@@ -74,44 +83,59 @@ export class Wardrobe {
   }
 
   private load(): void {
-    try {
-      const c = localStorage.getItem(LS_COINS_KEY);
-      this.totalCoins = c ? Math.max(0, parseInt(c, 10) || 0) : 0;
+    this.totalCoins = 0;
+    this.unlockedIds = new Set(['lumina']);
+    this.equippedId = 'lumina';
 
-      const u = localStorage.getItem(LS_UNLOCKED_KEY);
-      if (u) {
-        const arr = JSON.parse(u) as string[];
-        for (const id of arr) this.unlockedIds.add(id);
+    const current = parseStoredJson(lsGet(STORAGE_KEY));
+    if (isRecord(current)) {
+      this.totalCoins = toNonNegativeInteger(current.totalCoins);
+      if (Array.isArray(current.unlockedIds)) {
+        for (const id of current.unlockedIds) {
+          if (typeof id === 'string' && VALID_SKIN_IDS.has(id)) this.unlockedIds.add(id);
+        }
       }
-      this.unlockedIds.add('lumina'); // 默认初始必解锁
-
-      const eq = localStorage.getItem(LS_EQUIPPED_KEY);
-      if (eq && this.unlockedIds.has(eq)) {
-        this.equippedId = eq;
+      if (
+        typeof current.equippedId === 'string' &&
+        this.unlockedIds.has(current.equippedId)
+      ) {
+        this.equippedId = current.equippedId;
       }
-    } catch {
-      this.totalCoins = 0;
-      this.equippedId = 'lumina';
+      this.save();
+      return;
     }
+
+    const legacyCoins = Number.parseInt(lsGet(LEGACY_COINS_KEY) ?? '', 10);
+    this.totalCoins = toNonNegativeInteger(legacyCoins);
+    const legacyUnlocked = parseStoredJson(lsGet(LEGACY_UNLOCKED_KEY));
+    if (Array.isArray(legacyUnlocked)) {
+      for (const id of legacyUnlocked) {
+        if (typeof id === 'string' && VALID_SKIN_IDS.has(id)) this.unlockedIds.add(id);
+      }
+    }
+    const legacyEquipped = lsGet(LEGACY_EQUIPPED_KEY);
+    if (legacyEquipped && this.unlockedIds.has(legacyEquipped)) {
+      this.equippedId = legacyEquipped;
+    }
+    this.save();
   }
 
   private save(): void {
-    try {
-      localStorage.setItem(LS_COINS_KEY, this.totalCoins.toString());
-      localStorage.setItem(
-        LS_UNLOCKED_KEY,
-        JSON.stringify(Array.from(this.unlockedIds)),
-      );
-      localStorage.setItem(LS_EQUIPPED_KEY, this.equippedId);
-    } catch {
-      /* 忽略 */
-    }
+    lsSet(
+      STORAGE_KEY,
+      JSON.stringify({
+        totalCoins: this.totalCoins,
+        unlockedIds: Array.from(this.unlockedIds),
+        equippedId: this.equippedId,
+      }),
+    );
   }
 
   /** 游玩赚取金币 */
   addCoins(amount: number): number {
-    if (amount > 0) {
-      this.totalCoins += amount;
+    const safeAmount = toNonNegativeInteger(amount);
+    if (safeAmount > 0) {
+      this.totalCoins = Math.min(Number.MAX_SAFE_INTEGER, this.totalCoins + safeAmount);
       this.save();
     }
     return this.totalCoins;
@@ -119,9 +143,11 @@ export class Wardrobe {
 
   /** 扣除金币（用于天赋升级或商城购买） */
   deductCoins(amount: number): boolean {
-    if (amount <= 0) return true;
-    if (this.totalCoins < amount) return false;
-    this.totalCoins -= amount;
+    if (!Number.isFinite(amount)) return false;
+    const safeAmount = toNonNegativeInteger(amount);
+    if (safeAmount <= 0) return true;
+    if (this.totalCoins < safeAmount) return false;
+    this.totalCoins -= safeAmount;
     this.save();
     return true;
   }
@@ -171,4 +197,3 @@ export class Wardrobe {
     return { ok: true, msg: `🎉 成功解锁并装备【${skin.name}】！` };
   }
 }
-

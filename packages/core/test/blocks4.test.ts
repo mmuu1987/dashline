@@ -1,5 +1,5 @@
 /**
- * 新积木护栏（第四批）：激光闸门（Laser Gate）与池完整性（core.7）。
+ * 新积木护栏（第四批）：激光闸门（Laser Gate）与池完整性。
  */
 import { describe, expect, it } from 'vitest';
 import { HOLD_MAX_TICKS, makeInput } from '@dashline/shared';
@@ -162,7 +162,7 @@ describe('积木：激光闸门', () => {
   });
 });
 
-describe('core.7 池完整性与确定性', () => {
+describe('积木池完整性与确定性', () => {
   it('buildTrack 生成包含激光闸门与上升气流柱的赛道且跨次一致', () => {
     let hasGate = false;
     let hasWind = false;
@@ -180,4 +180,3 @@ describe('core.7 池完整性与确定性', () => {
     expect(t1).toBe(t2);
   });
 });
-

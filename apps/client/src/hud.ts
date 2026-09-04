@@ -5,6 +5,7 @@ import type { AchievementDef } from './achievements.js';
 export interface ResultData {
   finished: boolean;
   timeMs: number;
+  distanceM: number;
   score: number;
   coins: number;
   streak?: number;
@@ -50,7 +51,7 @@ export class Hud {
   }
 
   setMeta(attempts: number, bestText: string, streak?: number): void {
-    const streakBadge = streak && streak > 0 ? ` · 🔥 ${streak}连胜` : '';
+    const streakBadge = streak && streak > 0 ? ` · 🔥 连续完赛 ${streak}天` : '';
     this.meta.textContent = `尝试 #${attempts}${streakBadge}\n今日最佳 ${bestText}`;
   }
 
@@ -72,8 +73,8 @@ export class Hud {
 
   showResult(d: ResultData): void {
     const title = d.finished ? '🏁 完赛！' : '💥 撞毁了…';
-    const time = d.finished ? `⏱ 用时 <b>${(d.timeMs / 1000).toFixed(2)}s</b>` : `📏 距离 <b>${Math.floor(d.score / 100)}m</b>`;
-    const streakTag = d.streak && d.streak > 0 ? ` · 🔥 ${d.streak}天连胜` : '';
+    const time = d.finished ? `⏱ 用时 <b>${(d.timeMs / 1000).toFixed(2)}s</b>` : `📏 距离 <b>${d.distanceM}m</b>`;
+    const streakTag = d.streak && d.streak > 0 ? ` · 🔥 连续完赛 ${d.streak}天` : '';
     this.panel.innerHTML = `
       <h2>${title}</h2>
       <div class="big">${(d.finished ? d.timeMs / 1000 : d.score).toLocaleString?.() ?? ''}${d.finished ? ' s' : ' 分'}</div>

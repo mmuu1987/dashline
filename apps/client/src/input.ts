@@ -35,9 +35,11 @@ export class InputBuffer {
         e.preventDefault();
         if (!e.repeat) {
           this.presses++;
+          this.held = true;
           for (const h of this.actionHandlers) h();
+        } else {
+          this.held = true;
         }
-        this.held = true;
       } else if (isDownKey(e)) {
         e.preventDefault();
         this.downHeld = true;

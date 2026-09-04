@@ -2,6 +2,13 @@
  * 荣誉成就系统：
  * 记录玩家在赛道上的各种精彩操作、里程碑与挑战达成情况。
  */
+import {
+  isRecord,
+  lsGetFirst,
+  lsSet,
+  parseStoredJson,
+  toNonNegativeInteger,
+} from './storage.js';
 
 export interface AchievementDef {
   id: string;
@@ -12,7 +19,8 @@ export interface AchievementDef {
   unlockedAt?: number;
 }
 
-const STORAGE_KEY = 'dl_achievements';
+const STORAGE_KEY = 'dl_achievements_v1';
+const LEGACY_STORAGE_KEY = 'dl_achievements';
 
 const INITIAL_ACHIEVEMENTS: Omit<AchievementDef, 'unlocked'>[] = [
   {
@@ -61,22 +69,18 @@ export class Achievements {
   }
 
   private load(): void {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        this.unlockedMap = JSON.parse(raw) as Record<string, number>;
-      }
-    } catch {
-      this.unlockedMap = {};
+    this.unlockedMap = {};
+    const parsed = parseStoredJson(lsGetFirst([STORAGE_KEY, LEGACY_STORAGE_KEY]));
+    if (!isRecord(parsed)) return;
+    for (const def of INITIAL_ACHIEVEMENTS) {
+      const timestamp = toNonNegativeInteger(parsed[def.id]);
+      if (timestamp > 0) this.unlockedMap[def.id] = timestamp;
     }
+    this.save();
   }
 
   private save(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.unlockedMap));
-    } catch {
-      // ignore
-    }
+    lsSet(STORAGE_KEY, JSON.stringify(this.unlockedMap));
   }
 
   getAll(): AchievementDef[] {
@@ -107,4 +111,3 @@ export class Achievements {
     return Boolean(this.unlockedMap[id]);
   }
 }
-

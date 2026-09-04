@@ -6,7 +6,7 @@
 apps/client
   ├─ main / input / hud
   ├─ render / audio
-  └─ meta / talents / achievements / wardrobe / storage
+  └─ meta / best-record / talents / achievements / wardrobe / storage
               │
               ▼
 packages/core
@@ -42,4 +42,4 @@ packages/shared
 
 ## 数据边界
 
-本地数据包括每日最佳、近七日记录、连胜、金币、皮肤、成就和天赋。清除浏览器站点数据会清除这些进度；当前没有云同步或导入导出。
+本地数据包括每日最佳、近七日记录、连续完赛天数、金币、皮肤、成就和天赋。存档通过 `storage.ts` 安全访问，复杂结构使用带版本的 key，并在读取时校验字段、兼容旧 key 迁移。清除浏览器站点数据会清除这些进度；当前没有云同步或导入导出。

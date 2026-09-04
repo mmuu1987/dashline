@@ -11,7 +11,7 @@
  *  点按跳滞空      = 2v/g          → 距离 = vx · 滞空
  *  长按跳分段：蓄力期(g·factor) + 余量期(g)，再自由落体
  */
-import { HOLD_MAX_TICKS, STEP_S } from '@dashline/shared';
+import { DASH_DURATION_TICKS, HOLD_MAX_TICKS, STEP_S } from '@dashline/shared';
 
 /** 玩家碰撞半径（渲染层也从此导入） */
 export const PLAYER_R = 16;
@@ -31,7 +31,7 @@ export const TUNING = {
   /** 弹跳菇弹射初速系数（相对 jumpV） */
   bounceFactor: 1.32,
   /** 空中冲刺持续帧数 */
-  dashTicks: 8,
+  dashTicks: DASH_DURATION_TICKS,
   /** 空中冲刺前进速度 px/s */
   dashVx: 680,
   /** 空中急速下砸初速度 px/s */

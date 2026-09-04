@@ -5,6 +5,13 @@
  * 3. 驱动 Core 物理层的 PerksConfig。
  */
 import type { PerksConfig } from '@dashline/core';
+import {
+  isRecord,
+  lsGetFirst,
+  lsSet,
+  parseStoredJson,
+  toBoundedInteger,
+} from './storage.js';
 
 export interface TalentDef {
   id: string;
@@ -17,7 +24,8 @@ export interface TalentDef {
   effects: string[]; // 各级效果说明
 }
 
-const TALENT_STORAGE_KEY = 'dl_talents';
+const TALENT_STORAGE_KEY = 'dl_talents_v1';
+const LEGACY_TALENT_STORAGE_KEY = 'dl_talents';
 
 const INITIAL_TALENTS: Omit<TalentDef, 'level'>[] = [
   {
@@ -66,22 +74,20 @@ export class Talents {
   }
 
   private load(): void {
-    try {
-      const raw = localStorage.getItem(TALENT_STORAGE_KEY);
-      if (raw) {
-        this.levels = JSON.parse(raw) as Record<string, number>;
-      }
-    } catch {
-      this.levels = {};
+    this.levels = {};
+    const parsed = parseStoredJson(
+      lsGetFirst([TALENT_STORAGE_KEY, LEGACY_TALENT_STORAGE_KEY]),
+    );
+    if (!isRecord(parsed)) return;
+    for (const def of INITIAL_TALENTS) {
+      const level = toBoundedInteger(parsed[def.id], 0, def.maxLevel);
+      if (level > 0) this.levels[def.id] = level;
     }
+    this.save();
   }
 
   private save(): void {
-    try {
-      localStorage.setItem(TALENT_STORAGE_KEY, JSON.stringify(this.levels));
-    } catch {
-      // ignore
-    }
+    lsSet(TALENT_STORAGE_KEY, JSON.stringify(this.levels));
   }
 
   getAll(): TalentDef[] {
@@ -92,7 +98,8 @@ export class Talents {
   }
 
   getLevel(id: string): number {
-    return this.levels[id] ?? 0;
+    const def = INITIAL_TALENTS.find((t) => t.id === id);
+    return def ? toBoundedInteger(this.levels[id], 0, def.maxLevel) : 0;
   }
 
   getNextCost(id: string): number | null {
@@ -105,7 +112,7 @@ export class Talents {
 
   upgrade(id: string, currentTotalCoins: number): { ok: boolean; cost: number; newLevel: number } {
     const cost = this.getNextCost(id);
-    if (cost === null || currentTotalCoins < cost) {
+    if (!Number.isFinite(currentTotalCoins) || cost === null || currentTotalCoins < cost) {
       return { ok: false, cost: cost ?? 0, newLevel: this.getLevel(id) };
     }
 
@@ -134,4 +141,3 @@ export class Talents {
     };
   }
 }
-

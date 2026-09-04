@@ -5,5 +5,3 @@ dist/
 .env
 .DS_Store
 coverage/
-
-.github/

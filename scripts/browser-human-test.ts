@@ -1,208 +1,183 @@
 /**
- * 真人式浏览器 E2E 自动化测试（Playwright + 真实 Chromium）
- * 模拟真人玩家在浏览器中的完整行为：
- * 1. 加载游戏页面，验证 WebGL / PixiJS / HUD 渲染
- * 2. 模拟真实键盘 / 触控点按跳跃与长按蓄力
- * 3. 经历撞毁 -> 观察闪屏与结算面板
- * 4. 点击"再跑一次"重开第二局，验证连胜/今日最佳状态机
- * 5. 验证衣橱、成就、天赋和暂停等单机界面
- * 6. 测试静音与音频解锁并保存关键截图
+ * 真人式浏览器 E2E 自动化测试（Playwright + 真实 Chromium）。
+ * 覆盖启动、跑酷结算、重开、本地功能弹窗、暂停恢复与静音状态。
  */
 import { chromium, type Browser, type Page } from 'playwright';
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
-const SCREENSHOT_DIR = 'C:/Users/XC/.gemini/antigravity/brain/141a0d17-7c26-44c2-aea1-89d3ae8c67ae';
+const SCREENSHOT_DIR = process.env.DASHLINE_SCREENSHOT_DIR
+  ? path.resolve(process.env.DASHLINE_SCREENSHOT_DIR)
+  : fs.mkdtempSync(path.join(os.tmpdir(), 'dashline-browser-test-'));
 
-async function waitHttp(url: string, timeoutMs = 15000): Promise<boolean> {
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+function startClient(): ChildProcess {
+  const args = ['--filter', '@dashline/client', 'dev', '--port', '5173', '--strictPort'];
+  if (process.platform === 'win32') {
+    return spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'pnpm', ...args], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  }
+  return spawn('pnpm', args, { stdio: 'ignore' });
+}
+
+async function stopProcess(proc: ChildProcess | null): Promise<void> {
+  const pid = proc?.pid;
+  if (!pid || proc.exitCode !== null) return;
+  if (process.platform !== 'win32') {
+    proc.kill('SIGTERM');
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    killer.once('error', () => resolve());
+    killer.once('close', () => resolve());
+  });
+}
+
+async function waitHttp(url: string, timeoutMs = 15_000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
       const res = await fetch(url);
       if (res.ok) return true;
     } catch {
-      /* retry */
+      // 服务仍在启动。
     }
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((resolve) => setTimeout(resolve, 400));
   }
   return false;
 }
 
+async function requireVisible(page: Page, selector: string, label: string): Promise<void> {
+  const locator = page.locator(selector);
+  await locator.waitFor({ state: 'visible', timeout: 8_000 });
+  assert(await locator.isVisible(), `${label}未显示`);
+}
+
 async function runHumanTest(): Promise<void> {
   console.log('=== 启动真人式浏览器自动化交互测试 ===\n');
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
   let clientProc: ChildProcess | null = null;
   let browser: Browser | null = null;
+  const browserErrors: string[] = [];
+  const requestFailures: string[] = [];
 
   try {
-    // 1. 启动纯静态 Vite 客户端
     console.log('[1/6] 正在启动 Vite 单机客户端...');
-    clientProc = spawn('pnpm', ['--filter', '@dashline/client', 'dev', '--port', '5173', '--strictPort'], {
-      shell: true,
-      stdio: 'pipe',
-    });
-
-    const clientReady = await waitHttp('http://localhost:5173');
-
-    if (!clientReady) {
-      throw new Error('客户端启动超时');
-    }
+    clientProc = startClient();
+    assert(await waitHttp('http://localhost:5173'), '客户端启动超时');
     console.log('✓ 单机客户端已就绪 (:5173)');
 
-    // 2. 启动真实 Chromium 浏览器
     console.log('[2/6] 正在启动 Chromium 浏览器并打开游戏页面...');
     browser = await chromium.launch({
-      headless: true, // 可在无头环境下精准渲染 WebGL
+      headless: true,
       args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-webgl'],
     });
-
     const context = await browser.newContext({
       viewport: { width: 960, height: 540 },
       deviceScaleFactor: 1,
     });
-    const page: Page = await context.newPage();
-
-    // 监听控制台错误与未捕获异常
+    const page = await context.newPage();
     page.on('console', (msg) => {
-      console.log(`[Browser Console ${msg.type()}] ${msg.text()}`);
+      if (msg.type() === 'warning' || msg.type() === 'error') {
+        browserErrors.push(`console.${msg.type()}: ${msg.text()}`);
+      }
     });
-    page.on('pageerror', (err) => {
-      console.error(`[Browser PageError]`, err);
+    page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+    page.on('requestfailed', (request) => {
+      requestFailures.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? 'unknown'}`);
     });
 
-    await page.goto('http://localhost:5173', { waitUntil: 'commit' });
+    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await page.locator('html[data-dashline-ready="true"]').waitFor({ timeout: 15_000 });
 
-    // 3. 验证 Canvas 与 HUD 初始状态
     console.log('[3/6] 验证 WebGL Canvas 与 HUD 渲染...');
-    const canvas = await page.waitForSelector('canvas.game-canvas');
-    if (!canvas) throw new Error('Canvas 未找到');
-
+    await requireVisible(page, 'canvas.game-canvas', 'Canvas');
     const metaText = await page.locator('#hud-meta').innerText();
+    assert(metaText.trim().length > 0, '初始 HUD 为空');
+    assert(metaText.includes('尝试 #1'), `初始尝试次数异常：${metaText}`);
     console.log(`✓ 初始 HUD 状态: "${metaText.replace(/\n/g, ' | ')}"`);
 
-    // 4. 第一局：模拟真人点按与长按跳跃
-    console.log('[4/6] 模拟真人第 1 局游戏操作（单指操作跑酷）...');
-    // 人眼观察 0.5s
+    console.log('[4/6] 模拟真人第 1 局游戏操作...');
     await page.waitForTimeout(500);
-
-    // 动作 1：小跳起步
-    console.log('  -> 模拟真人点按 [Space] 短跳');
     await page.keyboard.press('Space');
     await page.waitForTimeout(700);
-
-    // 动作 2：蓄力大跳 (按住 280ms)
-    console.log('  -> 模拟真人长按 [Space] 蓄力大跳 (280ms)');
     await page.keyboard.down('Space');
     await page.waitForTimeout(280);
     await page.keyboard.up('Space');
-    await page.waitForTimeout(1400);
-
-    // 读取实时跑动距离
+    await page.waitForTimeout(1_400);
     const runningStats = await page.locator('#hud-stats').innerText();
-    console.log(`  -> 实时跑动进度: ${runningStats.replace(/\n/g, ' | ')}`);
+    assert(runningStats.includes('📏'), '跑动 HUD 未更新距离');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_01_running.png') });
 
-    // 截图 1: 奔跑中
-    const runPicPath = path.join(SCREENSHOT_DIR, 'human_test_01_running.png');
-    await page.screenshot({ path: runPicPath });
-    // 等待自然落地并发生撞毁/结算
-    await page.waitForTimeout(3500);
+    await requireVisible(page, '#result.show', '撞毁结算面板');
+    const resultText = await page.locator('#result-panel').innerText();
+    assert(resultText.includes('撞毁了'), `未进入预期撞毁结算：${resultText}`);
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_02_crash.png') });
 
-    // 截图 2: 撞毁结算
-    const crashPicPath = path.join(SCREENSHOT_DIR, 'human_test_02_crash.png');
-    await page.screenshot({ path: crashPicPath });
-    console.log(`✓ 截图已保存: ${crashPicPath}`);
-
-    // 5. 第二局：模拟真人点击结算面板 [再跑一次] 按钮
-    console.log('[5/6] 模拟真人点击 [再跑一次] 按钮快速重开...');
-    const retryBtn = page.locator('#btn-retry');
-    if (await retryBtn.isVisible()) {
-      await retryBtn.click();
-    } else {
-      await page.keyboard.press('KeyR');
-    }
-    await page.waitForTimeout(500);
-
+    console.log('[5/6] 点击 [再跑一次] 并验证尝试次数...');
+    await page.locator('#btn-retry').click();
+    await page.waitForFunction(() => document.querySelector('#hud-meta')?.textContent?.includes('尝试 #2'));
     const round2Meta = await page.locator('#hud-meta').innerText();
-    console.log(`✓ 重开成功，当前 HUD: "${round2Meta.replace(/\n/g, ' | ')}"`);
+    assert(round2Meta.includes('尝试 #2'), `重开后尝试次数异常：${round2Meta}`);
 
-    // 6. 交互测试：查看外观衣橱弹窗
-    console.log('[6/6] 验证外观、成就、天赋、暂停和音频界面...');
-    const wardrobeBtn = page.locator('#btn-wardrobe');
-    await wardrobeBtn.click();
-    await page.waitForTimeout(400);
+    console.log('[6/6] 验证衣橱、成就、天赋、暂停和音频界面...');
+    await page.locator('#btn-wardrobe').click();
+    await requireVisible(page, '#result.show', '衣橱面板');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_05_wardrobe.png') });
+    await page.locator('#btn-wclose').click();
 
-    const skinPicPath = path.join(SCREENSHOT_DIR, 'human_test_05_wardrobe.png');
-    await page.screenshot({ path: skinPicPath });
-    console.log(`✓ 衣橱面板截图已保存: ${skinPicPath}`);
-    await page.click('#btn-wclose', { force: true });
-    await page.waitForTimeout(300);
+    await page.locator('#btn-achievements').click();
+    await requireVisible(page, '#result.show', '成就面板');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_06_achievements.png') });
+    await page.locator('#btn-aclose').click();
 
-    // 7. 交互测试：查看荣誉成就弹窗
-    const achBtn = page.locator('#btn-achievements');
-    await achBtn.click();
-    await page.waitForTimeout(400);
+    await page.locator('#btn-talents').click();
+    await requireVisible(page, '#result.show', '天赋面板');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_07_talents.png') });
+    await page.locator('#btn-tclose').click();
 
-    const achPicPath = path.join(SCREENSHOT_DIR, 'human_test_06_achievements.png');
-    await page.screenshot({ path: achPicPath });
-    console.log(`✓ 成就面板截图已保存: ${achPicPath}`);
-    await page.click('#btn-aclose', { force: true });
-    await page.waitForTimeout(300);
-
-    // 8. 交互测试：查看单机离线天赋强化弹窗
-    const talentsBtn = page.locator('#btn-talents');
-    await talentsBtn.click();
-    await page.waitForTimeout(400);
-
-    const talentPicPath = path.join(SCREENSHOT_DIR, 'human_test_07_talents.png');
-    await page.screenshot({ path: talentPicPath });
-    console.log(`✓ 天赋面板截图已保存: ${talentPicPath}`);
-    await page.click('#btn-tclose', { force: true });
-    await page.waitForTimeout(300);
-
-    // 9. 交互测试：纯净定格暂停
     const pauseBtn = page.locator('#btn-pause');
-    await pauseBtn.click();
-    await page.waitForTimeout(300);
     const pauseBadge = page.locator('#pause-badge');
-    const isPaused = await pauseBadge.isVisible();
-    console.log(`✓ 暂停成功，顶部轻量提示徽章显示: ${isPaused}`);
-
-    // 保存纯净定格截图
-    const pausePicPath = path.join(SCREENSHOT_DIR, 'human_test_04_paused.png');
-    await page.screenshot({ path: pausePicPath });
-    console.log(`✓ 纯净定格截图已保存: ${pausePicPath}`);
-
-    // 恢复运行
     await pauseBtn.click();
-    await page.waitForTimeout(300);
-    console.log('✓ 恢复游戏运行');
+    await requireVisible(page, '#pause-badge.show', '暂停提示');
+    await page.locator('#btn-wardrobe').click();
+    await page.locator('#btn-wclose').click();
+    assert(await pauseBadge.isVisible(), '从弹窗返回后未保留暂停状态');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_04_paused.png') });
+    await page.keyboard.press('Space');
+    await pauseBadge.waitFor({ state: 'hidden' });
+    assert(!(await pauseBadge.isVisible()), '空格未恢复游戏');
 
-    // 9. 交互测试：音频开关
     const muteBtn = page.locator('#btn-mute');
     const initMute = await muteBtn.innerText();
     await muteBtn.click();
     const afterMute = await muteBtn.innerText();
-    console.log(`✓ 静音状态切换: ${initMute} -> ${afterMute}`);
+    assert(initMute !== afterMute, '静音按钮状态未变化');
     await muteBtn.click();
 
-    console.log('\n========================================');
-    console.log('🎉 真人式浏览器 E2E 自动化测试全流程 100% 成功！');
-    console.log('========================================');
+    assert(browserErrors.length === 0, `浏览器异常：\n${browserErrors.join('\n')}`);
+    assert(requestFailures.length === 0, `资源请求失败：\n${requestFailures.join('\n')}`);
+    console.log(`✓ 截图目录: ${SCREENSHOT_DIR}`);
+    console.log('🎉 真人式浏览器 E2E 自动化测试全流程成功！');
   } finally {
     if (browser) await browser.close();
-    const killTree = (pid?: number) => {
-      if (!pid) return;
-      try {
-        if (process.platform === 'win32') {
-          spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
-        } else {
-          process.kill(pid);
-        }
-      } catch {}
-    };
-    killTree(clientProc?.pid);
+    await stopProcess(clientProc);
   }
 }
 
-void runHumanTest();
+void runHumanTest().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});

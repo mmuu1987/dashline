@@ -3,7 +3,10 @@
  * 全部运行时生成（无素材文件 / 无版权负担 / Safari 兼容）。
  * unlock() 须在用户手势后调用；静音状态持久化 localStorage。
  */
-const LS_KEY = 'dl_mute';
+import { lsGet, lsSet } from './storage.js';
+
+const LS_KEY = 'dl_mute_v1';
+const LEGACY_LS_KEY = 'dl_mute';
 
 export class Sfx {
   private ctx: AudioContext | null = null;
@@ -17,10 +20,11 @@ export class Sfx {
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    try {
-      this.muted = localStorage.getItem(LS_KEY) === '1';
-    } catch {
-      this.muted = false;
+    const current = lsGet(LS_KEY);
+    const stored = current ?? lsGet(LEGACY_LS_KEY);
+    this.muted = stored === '1';
+    if (current === null && stored !== null) {
+      lsSet(LS_KEY, this.muted ? '1' : '0');
     }
   }
 
@@ -52,11 +56,7 @@ export class Sfx {
   /** 切换静音，返回切换后的状态 */
   toggleMute(): boolean {
     this.muted = !this.muted;
-    try {
-      localStorage.setItem(LS_KEY, this.muted ? '1' : '0');
-    } catch {
-      /* 忽略 */
-    }
+    lsSet(LS_KEY, this.muted ? '1' : '0');
     if (this.master && this.ctx) {
       this.master.gain.setTargetAtTime(this.muted ? 0 : 1, this.ctx.currentTime, 0.02);
     }

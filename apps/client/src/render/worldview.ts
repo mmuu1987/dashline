@@ -577,9 +577,11 @@ export class WorldView {
     for (let i = 0; i < this.coinSprites.length; i++) {
       const s = this.coinSprites[i]!;
       if (!s.visible) continue;
-      if (t && t.coins[i] && (t.coins[i]!.x < minX || t.coins[i]!.x > maxX)) continue;
+      const coin = t?.coins[i];
+      if (!coin) continue;
+      if (coin.x < minX || coin.x > maxX) continue;
       s.texture = this.assets.gemFrames[Math.floor(tSec * 8 + i) % 4]!;
-      s.y += Math.sin(tSec * 2.6 + i) * 0.18;
+      s.y = coin.y + Math.sin(tSec * 2.6 + i) * 4;
     }
     // 二段跳环
     for (let i = 0; i < this.ringSprites.length; i++) {
@@ -601,7 +603,7 @@ export class WorldView {
       const sh = this.shieldSprites[i]!;
       if (!sh.visible) continue;
       if (t && t.shields[i] && (t.shields[i]!.x < minX || t.shields[i]!.x > maxX)) continue;
-      sh.rotation += 0.04;
+      sh.rotation = tSec * 2.4 + i * 0.5;
       sh.scale.set(1 + Math.sin(tSec * 3.5 + i) * 0.1);
     }
     // 磁铁

@@ -12,12 +12,12 @@ import {
   type SimEvent,
   type World,
 } from '@dashline/core';
-import { seedForDate, themeForSeed, todayUTC } from '@dashline/shared';
+import { STEP_S, seedForDate, themeForSeed, todayUTC } from '@dashline/shared';
 import { Sfx } from './audio.js';
+import { loadBestRecord, saveBestRecord, type BestRecord } from './best-record.js';
 import { Hud } from './hud.js';
 import { InputBuffer } from './input.js';
-import { calculateStreak, saveDayRecord } from './meta.js';
-import { lsGet, lsSet } from './storage.js';
+import { calculateStreak, getDayRecord, saveDayRecord } from './meta.js';
 import { GameView, VIEW_H, VIEW_W } from './render.js';
 import { THEMES } from './render/background.js';
 import { loadAssets } from './render/textures.js';
@@ -25,8 +25,6 @@ import { exportShareCard, renderShareCard } from './share-card.js';
 import { Wardrobe } from './wardrobe.js';
 import { Achievements } from './achievements.js';
 import { Talents } from './talents.js';
-
-const STEP_S = 1 / 60;
 
 const vibrate = (p: number | number[]): void => {
   if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -37,14 +35,6 @@ const vibrate = (p: number | number[]): void => {
     }
   }
 };
-
-interface BestRecord {
-  score: number;
-  timeMs: number;
-  coins: number;
-  distanceM: number;
-  finished: boolean;
-}
 
 type Phase = 'run' | 'dead' | 'done' | 'pause';
 
@@ -72,7 +62,6 @@ async function boot(): Promise<void> {
   const dateStr = todayUTC();
   const seed = seedForDate(dateStr);
   const themeId = themeForSeed(seed);
-  const bestKey = `dl_best_${dateStr}`;
   let streak = calculateStreak(dateStr);
 
   const view = new GameView(assets, themeId);
@@ -101,6 +90,7 @@ async function boot(): Promise<void> {
   const pauseBtn = document.getElementById('btn-pause')!;
   function togglePause(): void {
     if (phase === 'dead' || phase === 'done') return;
+    input.resetHeld();
     if (phase === 'pause') {
       phase = 'run';
       hud.showPause(false);
@@ -114,15 +104,22 @@ async function boot(): Promise<void> {
     }
   }
   pauseBtn.addEventListener('click', togglePause);
-  input.onPause(() => togglePause());
+  input.onPause(() => {
+    if (!hud.isModalOpen()) togglePause();
+  });
 
   function enterModal(): void {
+    input.resetHeld();
+    if (!hud.isModalOpen() && (phase === 'run' || phase === 'pause')) {
+      modalReturnPhase = phase;
+    }
     if (phase === 'run') {
       phase = 'pause';
     }
   }
 
   function exitModal(): void {
+    input.resetHeld();
     const s = world.snapshot;
     if (!s.alive || s.finished || phase === 'done' || phase === 'dead') {
       phase = 'done';
@@ -130,9 +127,13 @@ async function boot(): Promise<void> {
       return;
     }
     hud.hideResult();
-    phase = 'run';
-    last = performance.now();
-    acc = 0;
+    phase = modalReturnPhase;
+    hud.showPause(phase === 'pause');
+    pauseBtn.textContent = phase === 'pause' ? '▶' : '⏸';
+    if (phase === 'run') {
+      last = performance.now();
+      acc = 0;
+    }
   }
 
   // ---- 外观衣橱按钮 ----
@@ -190,19 +191,13 @@ async function boot(): Promise<void> {
 
   // ---- 状态 ----
   let phase: Phase = 'run';
-  let attempts = 0;
+  let modalReturnPhase: 'run' | 'pause' = 'run';
+  let attempts = getDayRecord(dateStr)?.attempts ?? 0;
   let deadUntil = 0;
   let world: World = createWorld(seed, talents.getPerksConfig());
-  let best: BestRecord | null = null;
+  let best: BestRecord | null = loadBestRecord(dateStr);
   let usedShieldInRun = false;
   let nearMissCountInRun = 0;
-
-  try {
-    const raw = lsGet(bestKey);
-    if (raw) best = JSON.parse(raw) as BestRecord;
-  } catch {
-    best = null;
-  }
 
   hud.setMode('纯单机模式');
 
@@ -231,7 +226,11 @@ async function boot(): Promise<void> {
 
   input.onAction(() => {
     if (phase === 'done') {
+      input.resetHeld();
       resetAttempt();
+    } else if (phase === 'pause' && !hud.isModalOpen()) {
+      input.resetHeld();
+      togglePause();
     }
   });
 
@@ -272,7 +271,7 @@ async function boot(): Promise<void> {
       finished: s.finished,
     };
     best = rec;
-    lsSet(bestKey, JSON.stringify(rec));
+    saveBestRecord(dateStr, rec);
     return rec;
   }
 
@@ -300,6 +299,7 @@ async function boot(): Promise<void> {
     hud.showResult({
       finished: s.finished,
       timeMs: s.timeMs,
+      distanceM: s.distanceM,
       score: s.score,
       coins: s.coinCount,
       streak,
@@ -405,7 +405,7 @@ async function boot(): Promise<void> {
         }
         case 'shield': {
           sfx.shield();
-          view.onShield(0);
+          view.onShield(ev.index);
           hud.toast('🛡️ 获得水晶护盾！');
           break;
         }
@@ -420,7 +420,7 @@ async function boot(): Promise<void> {
         }
         case 'magnet': {
           sfx.magnet();
-          view.onMagnet(0);
+          view.onMagnet(ev.index);
           hud.toast('🧲 磁力宝石激活！');
           break;
         }
@@ -453,6 +453,7 @@ async function boot(): Promise<void> {
           view.fx.finish(world.track.finishX, GROUND_Y - 150);
           const s = world.snapshot;
           wardrobe.addCoins(s.coinCount);
+          commitAttempt();
 
           const aFirst = achievements.unlock('first_finish');
           if (aFirst) hud.toast(`🏆 解锁成就【${aFirst.title}】！`);
@@ -469,8 +470,6 @@ async function boot(): Promise<void> {
             const aStreak = achievements.unlock('streak_7');
             if (aStreak) hud.toast(`🏆 解锁成就【${aStreak.title}】！`);
           }
-
-          commitAttempt();
           showResultPanel();
           break;
         }
@@ -519,6 +518,10 @@ async function boot(): Promise<void> {
   });
 
   resetAttempt();
+  document.documentElement.dataset.dashlineReady = 'true';
 }
 
-void boot();
+void boot().catch((error: unknown) => {
+  document.documentElement.dataset.dashlineReady = 'failed';
+  console.error('Dashline 启动失败', error);
+});

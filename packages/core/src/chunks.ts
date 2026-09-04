@@ -29,6 +29,12 @@ import {
   type MagnetDef,
 } from './tuning.js';
 
+/** 确定性的抛物线拱形，避免三角函数造成跨引擎逐位差异。 */
+function arch01(t: number): number {
+  const u = Math.min(1, Math.max(0, t));
+  return 4 * u * (1 - u);
+}
+
 export type { GateDef, PortalDef, ShieldDef, MagnetDef } from './tuning.js';
 
 /** 世界常量（渲染层也从这里取） */
@@ -211,7 +217,7 @@ function chBonus(b: Builder, r: Rng): void {
   for (let i = 0; i < n; i++) {
     const t = (i + 1) / (n + 1);
     const cx = b.cursor + t * w;
-    const cy = GROUND_Y - Math.sin(t * Math.PI) * (holdJumpHeight * 0.92);
+    const cy = GROUND_Y - arch01(t) * (holdJumpHeight * 0.92);
     b.coins.push({ x: cx, y: cy, got: false });
   }
   b.cursor += w;
@@ -301,7 +307,7 @@ function chBoost(b: Builder, r: Rng): void {
   for (let i = 0; i < n; i++) {
     const t = (i + 1) / (n + 1);
     const cx = b.cursor + t * pitW;
-    const cy = GROUND_Y - Math.sin(t * Math.PI) * (holdJumpHeight * 1.35);
+    const cy = GROUND_Y - arch01(t) * (holdJumpHeight * 1.35);
     b.coins.push({ x: cx, y: cy, got: false });
   }
   b.gap(pitW);
@@ -499,7 +505,7 @@ function chMagnetRun(b: Builder, r: Rng): void {
   for (let i = 0; i < 7; i++) {
     const t = (i + 1) / 8;
     const cx = b.cursor + t * span;
-    const cy = GROUND_Y - 65 - Math.sin(t * Math.PI) * 110;
+    const cy = GROUND_Y - 65 - arch01(t) * 110;
     b.coins.push({ x: cx, y: cy, got: false });
   }
   b.run(span);

@@ -70,9 +70,9 @@ export type SimEvent =
   | { type: 'slam'; x: number; y: number }
   | { type: 'boost' }
   | { type: 'portal'; dir: 1 | -1 }
-  | { type: 'shield' }
+  | { type: 'shield'; index: number }
   | { type: 'shieldBreak' }
-  | { type: 'magnet' }
+  | { type: 'magnet'; index: number }
   | { type: 'nearmiss'; x: number; y: number }
   | { type: 'finish' };
 
@@ -476,7 +476,7 @@ export class World {
         ) {
           this._shieldsGotIdx.add(i);
           this._hasShield = true;
-          this.evq.push({ type: 'shield' });
+          this.evq.push({ type: 'shield', index: i });
         }
       }
     }
@@ -492,7 +492,7 @@ export class World {
         ) {
           this._magnetsGotIdx.add(i);
           this._magnetTicks = MAGNET_DURATION_TICKS;
-          this.evq.push({ type: 'magnet' });
+          this.evq.push({ type: 'magnet', index: i });
         }
       }
     }

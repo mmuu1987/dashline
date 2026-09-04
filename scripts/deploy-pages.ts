@@ -1,52 +1,101 @@
 /**
- * 一键发布到 GitHub Pages（跨平台 Node 脚本）
- * 1. 使用 Vite 构建 client 生产静态文件（相对路径 base=./）
- * 2. 将 dist 部署到 GitHub origin 的 gh-pages 分支
+ * 将 client 生产静态文件发布到指定 Git 仓库的 gh-pages 分支。
+ * 强制覆盖远端分支前必须显式传入 --allow-force。
  */
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
-const repoUrl = 'https://github.com/mmuu1987/dashline.git';
-const clientDist = path.resolve(process.cwd(), 'apps/client/dist');
-const tmpDir = path.join(os.tmpdir(), 'dashline-ghpages-' + Date.now());
-
-function run(cmd: string, cwd?: string): string {
-  return execSync(cmd, { cwd: cwd || process.cwd(), encoding: 'utf-8', stdio: 'inherit' });
+interface Options {
+  allowForce: boolean;
+  target?: string;
 }
 
-async function deploy(): Promise<void> {
-  console.log('=== 1. 构建客户端生产包 (Vite) ===');
-  run('pnpm --filter @dashline/client exec vite build --base=./');
-
-  console.log(`\n=== 2. 准备临时部署目录: ${tmpDir} ===`);
-  if (fs.existsSync(tmpDir)) {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+function parseOptions(args: string[]): Options {
+  const options: Options = { allowForce: false };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--allow-force') {
+      options.allowForce = true;
+    } else if (arg === '--target') {
+      const target = args[++i];
+      if (!target) throw new Error('--target 缺少 Git URL');
+      options.target = target;
+    } else {
+      throw new Error(`未知参数：${arg}`);
+    }
   }
-  fs.mkdirSync(tmpDir, { recursive: true });
-
-  // 复制 dist 内容
-  fs.cpSync(clientDist, tmpDir, { recursive: true });
-
-  console.log('\n=== 3. 提交并强制推送到 origin/gh-pages ===');
-  run('git init -b gh-pages', tmpDir);
-  run(`git remote add origin ${repoUrl}`, tmpDir);
-  run('git add -A', tmpDir);
-  run('git commit -m "deploy: core.7 release with Laser Gate, solver optimization, theme rotation and streak tracking"', tmpDir);
-  run('git push origin gh-pages --force', tmpDir);
-
-  // 清理临时目录
-  try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  } catch {}
-
-  console.log('\n============================================================');
-  console.log('🎉 GitHub Pages 发布成功！');
-  console.log('🔗 在线试玩地址: https://mmuu1987.github.io/dashline/');
-  console.log('（GitHub CDN 刷新约需 30~60 秒）');
-  console.log('============================================================\n');
+  return options;
 }
 
-void deploy();
+function run(file: string, args: string[], cwd = process.cwd()): void {
+  execFileSync(file, args, { cwd, stdio: 'inherit' });
+}
 
+function output(file: string, args: string[]): string {
+  return execFileSync(file, args, { encoding: 'utf8' }).trim();
+}
+
+function validateTarget(target: string): string {
+  const value = target.trim();
+  if (!value || /[\r\n]/.test(value)) throw new Error('Git 发布目标无效');
+  if (!/^(https?:\/\/|ssh:\/\/|git@)[^\s]+$/.test(value)) {
+    throw new Error(`不支持的 Git 发布目标：${value}`);
+  }
+  return value;
+}
+
+function deploy(): void {
+  const options = parseOptions(process.argv.slice(2));
+  if (!options.allowForce) {
+    throw new Error(
+      '发布会强制覆盖远端 gh-pages；确认目标后使用 pnpm pages:deploy -- --allow-force [--target <git-url>]',
+    );
+  }
+
+  const target = validateTarget(options.target ?? output('git', ['remote', 'get-url', 'origin']));
+  const clientDist = path.resolve(process.cwd(), 'apps/client/dist');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dashline-ghpages-'));
+
+  console.log(`发布目标：${target}`);
+  try {
+    console.log('=== 1. 构建客户端生产包 (Vite) ===');
+    if (process.platform === 'win32') {
+      run(process.env.ComSpec ?? 'cmd.exe', [
+        '/d',
+        '/s',
+        '/c',
+        'pnpm',
+        '--filter',
+        '@dashline/client',
+        'exec',
+        'vite',
+        'build',
+        '--base=./',
+      ]);
+    } else {
+      run('pnpm', ['--filter', '@dashline/client', 'exec', 'vite', 'build', '--base=./']);
+    }
+
+    console.log(`=== 2. 准备临时部署目录：${tempDir} ===`);
+    fs.cpSync(clientDist, tempDir, { recursive: true });
+
+    console.log('=== 3. 提交并强制推送 gh-pages ===');
+    run('git', ['init', '-b', 'gh-pages'], tempDir);
+    run('git', ['remote', 'add', 'origin', target], tempDir);
+    run('git', ['add', '-A'], tempDir);
+    run('git', ['commit', '-m', 'pages: build'], tempDir);
+    run('git', ['push', 'origin', 'gh-pages', '--force'], tempDir);
+    console.log('GitHub Pages 发布完成。');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+try {
+  deploy();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+}
