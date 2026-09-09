@@ -31,6 +31,10 @@ pnpm preview
 
 构建产物位于 `apps/client/dist`，可部署到任意静态网站托管服务。
 
+## 4399 运营版（可选能力）
+
+游戏默认纯单机运行。当构建产物被 4399 平台以 iframe 嵌入时，客户端会自动接入官方 H5小游戏 SDK（激励广告复活、平台进度条），任何平台失败都降级为纯单机，本地直开不受影响。构建变量 `VITE_DASHLINE_PLATFORM` 可强制开关。详见 [4399 最简运营方案](./docs/4399-minimal-operations-plan.md)。
+
 ## 工程结构
 
 | 路径 | 职责 |
@@ -39,6 +43,6 @@ pnpm preview
 | `packages/core` | 确定性赛道生成、物理、碰撞、计分 |
 | `apps/client` | PixiJS 渲染、HUD、音频和本地存档 |
 | `scripts` | 浏览器测试与静态页面部署 |
-| `docs` | 游戏设计和技术架构 |
+| `docs` | 游戏设计、技术架构、4399 运营方案与历史归档 |
 
 更详细的维护信息见 [HANDOVER.md](./HANDOVER.md)。

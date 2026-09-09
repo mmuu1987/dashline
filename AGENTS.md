@@ -20,7 +20,7 @@ Dashline 当前是一个**纯单机、纯静态 Web 跑酷游戏**。
 
 - 没有账号、登录、远程 API、数据库、排行榜、房间赛或远程 Ghost。
 - 不录制、上传或分享逐 tick 输入流。
-- 不加入 WebSocket、遥测、广告 SDK、云存档或外部业务服务。
+- 当前纯单机基线不加入 WebSocket、遥测、广告 SDK、云存档或外部业务服务；4399 运营版规划中的平台桥和广告能力必须通过独立适配层、功能开关和失败降级接入，不得污染 `core`。
 - 玩家进度只保存在浏览器 localStorage。
 - 每日赛道由 UTC 日期、`CORE_VERSION` 和确定性 PRNG 在本地生成。
 - 战报只在本地生成图片，不包含在线挑战或排名信息。
@@ -122,7 +122,8 @@ pnpm test:browser
 | 本地历史与连胜 | `apps/client/src/meta.ts` |
 | 天赋、成就、衣橱 | `apps/client/src/talents.ts`、`achievements.ts`、`wardrobe.ts` |
 | 每日种子和版本 | `packages/shared/src/daily.ts`、`constants.ts` |
-| 单元测试 | `packages/core/test/` |
+| 4399 平台接入与广告复活 | `apps/client/src/platform.ts`、`platform-h5mini.ts`、`platform-config.ts` |
+| 单元测试 | `packages/core/test/`、`apps/client/test/` |
 | 浏览器流程测试 | `scripts/browser-human-test.ts` |
 
 ## 当前基线

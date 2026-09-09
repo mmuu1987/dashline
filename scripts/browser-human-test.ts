@@ -1,6 +1,7 @@
 /**
  * 真人式浏览器 E2E 自动化测试（Playwright + 真实 Chromium）。
- * 覆盖启动、跑酷结算、重开、本地功能弹窗、暂停恢复与静音状态。
+ * 覆盖启动、跑酷结算、重开、本地功能弹窗、暂停恢复与静音状态，
+ * 以及两种平台接入场景：宿主桥注入与官方 h5mini-2.0 API（iframe 嵌入自动检测）。
  */
 import { chromium, type Browser, type Page } from 'playwright';
 import { spawn, type ChildProcess } from 'child_process';
@@ -88,6 +89,13 @@ async function runHumanTest(): Promise<void> {
       viewport: { width: 960, height: 540 },
       deviceScaleFactor: 1,
     });
+    await context.addInitScript({
+      content: `window.__DASHLINE_PLATFORM__ = {
+        init: async () => undefined,
+        showRewardedAd: async () => 'completed',
+        track: () => undefined
+      };`,
+    });
     const page = await context.newPage();
     page.on('console', (msg) => {
       if (msg.type() === 'warning' || msg.type() === 'error') {
@@ -107,6 +115,9 @@ async function runHumanTest(): Promise<void> {
     const metaText = await page.locator('#hud-meta').innerText();
     assert(metaText.trim().length > 0, '初始 HUD 为空');
     assert(metaText.includes('尝试 #1'), `初始尝试次数异常：${metaText}`);
+    const bridgePresent = await page.evaluate(() => '__DASHLINE_PLATFORM__' in window);
+    const modeText = await page.locator('#hud-mode').innerText();
+    assert(modeText.includes('4399'), `平台桥未进入运营模式：${modeText}（bridge=${bridgePresent}）`);
     console.log(`✓ 初始 HUD 状态: "${metaText.replace(/\n/g, ' | ')}"`);
 
     console.log('[4/6] 模拟真人第 1 局游戏操作...');
@@ -126,7 +137,14 @@ async function runHumanTest(): Promise<void> {
     assert(resultText.includes('撞毁了'), `未进入预期撞毁结算：${resultText}`);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_02_crash.png') });
 
-    console.log('[5/6] 点击 [再跑一次] 并验证尝试次数...');
+    console.log('[5/6] 验证激励广告复活后同局继续，再重新开始...');
+    await requireVisible(page, '#btn-revive', '激励广告复活按钮');
+    await page.locator('#btn-revive').click();
+    await page.locator('#result').waitFor({ state: 'hidden' });
+    assert((await page.locator('#hud-meta').innerText()).includes('尝试 #1'), '复活不应增加尝试次数');
+    await page.waitForTimeout(2_200);
+    await requireVisible(page, '#result.show', '复活后的再次结算面板');
+    assert(await page.locator('#btn-revive').count() === 0, '同一局不应出现第二次广告复活入口');
     await page.locator('#btn-retry').click();
     await page.waitForFunction(() => document.querySelector('#hud-meta')?.textContent?.includes('尝试 #2'));
     const round2Meta = await page.locator('#hud-meta').innerText();
@@ -167,7 +185,62 @@ async function runHumanTest(): Promise<void> {
     assert(initMute !== afterMute, '静音按钮状态未变化');
     await muteBtn.click();
 
+    // ---- 场景 B：官方 h5mini-2.0 API 经 iframe 嵌入时自动接入 ----
+    console.log('[官方 SDK 场景] 正在 iframe 宿主中验证 h5api 自动接入...');
+    const sdkContext = await browser.newContext({
+      viewport: { width: 1000, height: 600 },
+      deviceScaleFactor: 1,
+    });
+    const sdkErrors: string[] = [];
+    // 与官方 api.js 契约一致的桩：canPlayAd / playAd(10000→10001) / progress
+    await sdkContext.addInitScript({
+      content: `window.h5api = {
+        progress: function () { window.__h5ProgressCalls = (window.__h5ProgressCalls || 0) + 1; },
+        canPlayAd: function (cb) { cb({ canPlayAd: true, remain: 1 }); },
+        playAd: function (cb) {
+          cb({ code: 10000, message: '开始播放' });
+          setTimeout(function () { cb({ code: 10001, message: '播放结束' }); }, 60);
+        },
+        playInterstitialAd: function () {}
+      };`,
+    });
+    const hostPage = await sdkContext.newPage();
+    hostPage.on('pageerror', (error) => sdkErrors.push(`pageerror: ${error.message}`));
+    hostPage.on('requestfailed', (request) => {
+      requestFailures.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? 'unknown'}`);
+    });
+    const hostHtml =
+      '<!doctype html><html><body style="margin:0;background:#222">' +
+      '<iframe id="g" src="http://localhost:5173" style="width:960px;height:540px;border:0"></iframe>' +
+      '</body></html>';
+    await hostPage.setContent(hostHtml, { waitUntil: 'domcontentloaded' });
+    let gameFrame = hostPage.frames().find((f) => f.url().includes('localhost:5173'));
+    for (let i = 0; i < 20 && !gameFrame; i += 1) {
+      await hostPage.waitForTimeout(250);
+      gameFrame = hostPage.frames().find((f) => f.url().includes('localhost:5173'));
+    }
+    assert(gameFrame, `未找到游戏 iframe（frames: ${hostPage.frames().map((f) => f.url()).join(', ')}）`);
+    await gameFrame.locator('html[data-dashline-ready="true"]').waitFor({ timeout: 15_000 });
+
+    const sdkModeText = await gameFrame.locator('#hud-mode').innerText();
+    assert(sdkModeText.includes('4399'), `iframe 中未进入官方 SDK 运营模式：${sdkModeText}`);
+    const progressCalls = await gameFrame.evaluate(
+      () => (window as unknown as { __h5ProgressCalls?: number }).__h5ProgressCalls ?? 0,
+    );
+    assert(progressCalls > 0, '加载进度未上报到平台进度条');
+
+    await gameFrame.locator('#result.show').waitFor({ timeout: 20_000 });
+    await gameFrame.locator('#btn-revive').waitFor({ state: 'visible', timeout: 8_000 });
+    await hostPage.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_08_h5sdk_crash.png') });
+    await gameFrame.locator('#btn-revive').click();
+    await gameFrame.locator('#result').waitFor({ state: 'hidden', timeout: 8_000 });
+    const sdkMeta = await gameFrame.locator('#hud-meta').innerText();
+    assert(sdkMeta.includes('尝试 #1'), `官方 SDK 复活不应增加尝试次数：${sdkMeta}`);
+    console.log('✓ 官方 h5api 场景：自动检测、进度上报、激励复活全部通过');
+    await sdkContext.close();
+
     assert(browserErrors.length === 0, `浏览器异常：\n${browserErrors.join('\n')}`);
+    assert(sdkErrors.length === 0, `官方 SDK 场景浏览器异常：\n${sdkErrors.join('\n')}`);
     assert(requestFailures.length === 0, `资源请求失败：\n${requestFailures.join('\n')}`);
     console.log(`✓ 截图目录: ${SCREENSHOT_DIR}`);
     console.log('🎉 真人式浏览器 E2E 自动化测试全流程成功！');

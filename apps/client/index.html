@@ -169,9 +169,31 @@
       #btn-wardrobe { left: calc(100px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
       #btn-achievements { left: calc(144px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
       #btn-talents { left: calc(188px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom)); }
+      #boot-error {
+        position: fixed; inset: 0; z-index: 200; display: none;
+        align-items: center; justify-content: center; padding: 24px;
+        background: #0d0f14; color: #e2e8f0; text-align: center;
+      }
+      #boot-error.show { display: flex; }
+      #boot-error .panel p { margin: 10px 0 16px; color: #aab6cf; line-height: 1.6; }
+      #boot-loading {
+        position: fixed; inset: 0; z-index: 190; display: flex;
+        align-items: center; justify-content: center; background: #0d0f14;
+        color: #cfd8ea; font-size: 15px;
+      }
+      html[data-dashline-ready="true"] #boot-loading,
+      html[data-dashline-ready="failed"] #boot-loading { display: none; }
     </style>
   </head>
   <body>
+    <div id="boot-loading">游戏资源加载中…</div>
+    <div id="boot-error">
+      <div class="panel">
+        <h2>游戏启动失败</h2>
+        <p id="boot-error-message">请检查浏览器图形能力或网络后重试。</p>
+        <button id="btn-boot-retry">重新加载</button>
+      </div>
+    </div>
     <div id="stage">
       <div id="game"></div>
       <div id="hud">

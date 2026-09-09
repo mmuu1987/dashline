@@ -12,6 +12,8 @@ export interface ResultData {
   onRetry: () => void;
   onCard: () => void;
   onTalents?: () => void;
+  onRewardedRevive?: () => void;
+  rewardBusy?: boolean;
 }
 
 export class Hud {
@@ -80,11 +82,14 @@ export class Hud {
       <div class="big">${(d.finished ? d.timeMs / 1000 : d.score).toLocaleString?.() ?? ''}${d.finished ? ' s' : ' 分'}</div>
       <div class="row">${time} · 🪙 ${d.coins}${streakTag}</div>
       <div class="btns">
+        ${d.onRewardedRevive ? `<button id="btn-revive" class="race-btn" ${d.rewardBusy ? 'disabled' : ''}>${d.rewardBusy ? '广告准备中…' : '▶ 看广告复活'}</button>` : ''}
         <button id="btn-retry">再跑一次</button>
         <button id="btn-talents-res" class="race-btn">⚡ 天赋强化</button>
         <button id="btn-card" class="secondary-btn">📸 战报</button>
       </div>`;
     document.getElementById('btn-retry')!.onclick = d.onRetry;
+    const reviveBtn = document.getElementById('btn-revive') as HTMLButtonElement | null;
+    if (reviveBtn && d.onRewardedRevive && !d.rewardBusy) reviveBtn.onclick = d.onRewardedRevive;
     if (d.onTalents && document.getElementById('btn-talents-res')) {
       document.getElementById('btn-talents-res')!.onclick = d.onTalents;
     }

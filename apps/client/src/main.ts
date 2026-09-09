@@ -25,6 +25,7 @@ import { exportShareCard, renderShareCard } from './share-card.js';
 import { Wardrobe } from './wardrobe.js';
 import { Achievements } from './achievements.js';
 import { Talents } from './talents.js';
+import { createPlatform, type GamePlatform } from './platform.js';
 
 const vibrate = (p: number | number[]): void => {
   if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -39,6 +40,8 @@ const vibrate = (p: number | number[]): void => {
 type Phase = 'run' | 'dead' | 'done' | 'pause';
 
 async function boot(): Promise<void> {
+  const platform: GamePlatform = createPlatform();
+  await platform.init();
   const app = new Application();
   await app.init({
     width: VIEW_W,
@@ -56,7 +59,11 @@ async function boot(): Promise<void> {
   const wardrobe = new Wardrobe();
   const achievements = new Achievements();
   const talents = new Talents();
-  const assets = await loadAssets();
+  platform.reportLoadProgress?.(1); // 平台进度条起点信号
+  const assets = await loadAssets((done, total) => {
+    platform.reportLoadProgress?.(Math.round((done / total) * 100));
+  });
+  platform.reportLoadProgress?.(100);
 
   // ---- 每日种子与主题 ----
   const dateStr = todayUTC();
@@ -192,14 +199,20 @@ async function boot(): Promise<void> {
   // ---- 状态 ----
   let phase: Phase = 'run';
   let modalReturnPhase: 'run' | 'pause' = 'run';
+  let autoPaused = false;
   let attempts = getDayRecord(dateStr)?.attempts ?? 0;
   let deadUntil = 0;
   let world: World = createWorld(seed, talents.getPerksConfig());
+  let reviveCheckpoint: World = world.clone();
   let best: BestRecord | null = loadBestRecord(dateStr);
   let usedShieldInRun = false;
   let nearMissCountInRun = 0;
+  let revivedInRun = false;
+  let rewardBusy = false;
+  let attemptCommitted = false;
 
-  hud.setMode('纯单机模式');
+  hud.setMode(platform.isAvailable() ? '4399 运营模式' : '纯单机模式');
+  platform.track('game_ready');
 
   function fmtBest(b: BestRecord): string {
     return b.finished ? `${(b.timeMs / 1000).toFixed(2)}s` : `${b.distanceM}m`;
@@ -207,13 +220,18 @@ async function boot(): Promise<void> {
 
   function resetAttempt(): void {
     world = createWorld(seed, talents.getPerksConfig());
+    reviveCheckpoint = world.clone();
     view.setTrack(world.track);
     view.resetCamera();
     view.resetAttemptFx(START_X, START_Y);
     attempts++;
     usedShieldInRun = false;
     nearMissCountInRun = 0;
+    revivedInRun = false;
+    rewardBusy = false;
+    attemptCommitted = false;
     phase = 'run';
+    platform.track('run_start', { attempt: attempts });
     hud.hideResult();
     hud.showPause(false);
     pauseBtn.textContent = '⏸';
@@ -248,9 +266,29 @@ async function boot(): Promise<void> {
   const isPortraitPhone = (): boolean =>
     window.innerHeight > window.innerWidth && window.innerWidth < 700;
 
-  window.addEventListener('blur', () => input.resetHeld());
+  const pauseForLifecycle = (): void => {
+    input.resetHeld();
+    if (phase === 'run') {
+      autoPaused = true;
+      phase = 'pause';
+      hud.showPause(true);
+      pauseBtn.textContent = '▶';
+    }
+  };
+  const resumeFromLifecycle = (): void => {
+    if (!autoPaused || phase !== 'pause') return;
+    autoPaused = false;
+    phase = 'run';
+    hud.showPause(false);
+    pauseBtn.textContent = '⏸';
+    last = performance.now();
+    acc = 0;
+  };
+  window.addEventListener('blur', pauseForLifecycle);
+  window.addEventListener('focus', resumeFromLifecycle);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) input.resetHeld();
+    if (document.hidden) pauseForLifecycle();
+    else resumeFromLifecycle();
   });
 
   const fsBtn = document.getElementById('btn-fs')!;
@@ -276,6 +314,8 @@ async function boot(): Promise<void> {
   }
 
   function commitAttempt(): void {
+    if (attemptCommitted) return;
+    attemptCommitted = true;
     saveBestIfBetter();
     const s = world.snapshot;
     if (s.score > 0) {
@@ -294,6 +334,53 @@ async function boot(): Promise<void> {
     hud.setMeta(attempts, best ? fmtBest(best) : '--', streak);
   }
 
+  async function tryRewardedRevive(): Promise<void> {
+    if (rewardBusy || revivedInRun || world.snapshot.finished) return;
+    rewardBusy = true;
+    hud.showResult({
+      finished: false,
+      timeMs: world.snapshot.timeMs,
+      distanceM: world.snapshot.distanceM,
+      score: world.snapshot.score,
+      coins: world.snapshot.coinCount,
+      onRetry: () => resetAttempt(),
+      onCard: () => void makeShareCard(),
+      onTalents: () => openTalents(),
+      rewardBusy: true,
+    });
+    input.resetHeld();
+    try {
+      platform.track('reward_ad_click');
+      const result = await platform.showRewardedAd('revive');
+      if (result === 'completed') {
+        world.reviveFrom(reviveCheckpoint);
+        revivedInRun = true;
+        attemptCommitted = false;
+        phase = 'run';
+        deadUntil = 0;
+        view.setTrack(world.track);
+        view.restoreDynamicState(world.snapshot);
+        view.resetCamera();
+        view.resetAttemptFx(world.snapshot.x, world.snapshot.y);
+        hud.hideResult();
+        hud.showPause(false);
+        platform.track('reward_ad_complete');
+        platform.track('revive_success');
+        last = performance.now();
+        acc = 0;
+        return;
+      }
+      platform.track(result === 'cancelled' ? 'reward_ad_cancel' : 'reward_ad_fail', { result });
+      hud.toast(result === 'unavailable' ? '暂无可用广告，请直接重新开始' : '广告未完成，未获得复活');
+    } catch {
+      platform.track('reward_ad_fail');
+      hud.toast('广告暂时不可用，请直接重新开始');
+    } finally {
+      rewardBusy = false;
+      if (phase === 'dead' || phase === 'done') showResultPanel();
+    }
+  }
+
   function showResultPanel(): void {
     const s = world.snapshot;
     hud.showResult({
@@ -306,6 +393,10 @@ async function boot(): Promise<void> {
       onRetry: () => resetAttempt(),
       onCard: () => void makeShareCard(),
       onTalents: () => openTalents(),
+      onRewardedRevive: !s.finished && !revivedInRun && platform.isAvailable()
+        ? () => void tryRewardedRevive()
+        : undefined,
+      rewardBusy,
     });
   }
 
@@ -445,6 +536,8 @@ async function boot(): Promise<void> {
           const s = world.snapshot;
           view.fx.crash(s.x, s.y);
           commitAttempt();
+          // 撞毁后立刻后台刷新广告库存，结算面板渲染时入口状态即已最新
+          platform.refreshAds?.();
           break;
         }
         case 'finish': {
@@ -481,6 +574,16 @@ async function boot(): Promise<void> {
     const inp = input.poll();
     world.step(inp);
     handleEvents(world.takeEvents());
+    // 只在安全落地且已前进一段距离时保存检查点，避免复活到坑内或危险空中状态。
+    const snap = world.snapshot;
+    if (
+      phase === 'run' &&
+      snap.alive &&
+      snap.grounded &&
+      snap.x - reviveCheckpoint.snapshot.x >= 120
+    ) {
+      reviveCheckpoint = world.clone();
+    }
   }
 
   // ---- 固定步长主循环 ----
@@ -523,5 +626,11 @@ async function boot(): Promise<void> {
 
 void boot().catch((error: unknown) => {
   document.documentElement.dataset.dashlineReady = 'failed';
+  const message = error instanceof Error ? error.message : '未知启动错误';
+  const errorEl = document.getElementById('boot-error');
+  const messageEl = document.getElementById('boot-error-message');
+  if (messageEl) messageEl.textContent = `无法启动游戏：${message}。请检查浏览器图形能力或网络后重试。`;
+  errorEl?.classList.add('show');
+  document.getElementById('btn-boot-retry')?.addEventListener('click', () => window.location.reload(), { once: true });
   console.error('Dashline 启动失败', error);
 });

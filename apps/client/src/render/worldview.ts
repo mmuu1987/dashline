@@ -464,6 +464,30 @@ export class WorldView {
     if (s) s.visible = false;
   }
 
+  /** 将可收集物和碎裂物的视觉状态精确同步到模拟快照，支持检查点回退。 */
+  restoreDynamicState(state: {
+    coinsGot: readonly number[];
+    crumblesBroken: readonly number[];
+    ringsGot: readonly number[];
+    shieldsGot: readonly number[];
+    magnetsGot: readonly number[];
+  }): void {
+    const coins = new Set(state.coinsGot);
+    const broken = new Set(state.crumblesBroken);
+    const rings = new Set(state.ringsGot);
+    const shields = new Set(state.shieldsGot);
+    const magnets = new Set(state.magnetsGot);
+    this.coinSprites.forEach((sprite, i) => { sprite.visible = !coins.has(i); });
+    this.crumbleSprites.forEach((sprite, i) => { if (sprite) sprite.visible = !broken.has(i); });
+    this.ringSprites.forEach((sprite, i) => { sprite.visible = !rings.has(i); });
+    this.shieldSprites.forEach((sprite, i) => { sprite.visible = !shields.has(i); });
+    this.magnetSprites.forEach((sprite, i) => { sprite.visible = !magnets.has(i); });
+    this.brokenPlats = broken;
+    this.ringsGotSet = rings;
+    this.shieldsGotSet = shields;
+    this.magnetsGotSet = magnets;
+  }
+
   setCrumbles(broken: readonly number[]): void {
     for (const i of broken) {
       if (this.brokenPlats.has(i)) continue;

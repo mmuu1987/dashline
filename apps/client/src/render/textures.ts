@@ -304,7 +304,9 @@ async function loadBitmap(url: string): Promise<{ bmp: ImageBitmap; top: number;
   return { bmp, top: toHex(px[0]!, px[1]!, px[2]!), bottom: toHex(px[4]!, px[5]!, px[6]!) };
 }
 
-export async function loadAssets(): Promise<GameAssets> {
+export async function loadAssets(
+  onProgress?: (done: number, total: number) => void,
+): Promise<GameAssets> {
   const urls = [
     'assets/ground.png',
     'assets/plank.png',
@@ -329,8 +331,31 @@ export async function loadAssets(): Promise<GameAssets> {
     'assets/art/platform_long.png',
     'assets/art/crate.png',
   ] as const;
-  const loaded = await Promise.all(urls.map((u) => Assets.load(assetUrl(u))));
-  const skyBmp = await loadBitmap('assets/art/sky.png');
+  // 进度总量包含天空位图的二次读取，保证 100% 对应全部资源就绪
+  const total = urls.length + 1;
+  let done = 0;
+  let loaded: unknown[];
+  try {
+    loaded = await Promise.all(
+      urls.map((u) =>
+        Assets.load(assetUrl(u)).then((tex) => {
+          done += 1;
+          onProgress?.(done, total);
+          return tex;
+        }),
+      ),
+    );
+  } catch (error) {
+    throw new Error('游戏资源加载失败，请检查网络或刷新页面重试', { cause: error });
+  }
+  let skyBmp: { bmp: ImageBitmap; top: number; bottom: number };
+  try {
+    skyBmp = await loadBitmap('assets/art/sky.png');
+  } catch (error) {
+    throw new Error('天空资源读取失败，请刷新页面重试', { cause: error });
+  }
+  done += 1;
+  onProgress?.(done, total);
   return {
     ground: loaded[0] as Texture,
     plank: loaded[1] as Texture,

@@ -35,6 +35,25 @@ function runWorld(
   return { snap: w.snapshot, events };
 }
 
+describe('复活检查点', () => {
+  it('从同一赛道检查点复活并获得短暂无敌', () => {
+    const w = createWorld(SEED);
+    const checkpoint = w.clone();
+    w.reviveFrom(checkpoint);
+    expect(w.snapshot.alive).toBe(true);
+    expect(w.snapshot.tick).toBe(0);
+    // 复活后的保护期内，即使连续推进也不能被立即撞毁；具体碰撞由后续输入决定。
+    for (let i = 0; i < 3; i++) w.step(0);
+    expect(w.snapshot.alive).toBe(true);
+  });
+
+  it('拒绝不属于当前赛道的检查点', () => {
+    const w = createWorld(SEED);
+    const other = createWorld(SEED + 1n);
+    expect(() => w.reviveFrom(other)).toThrow('复活检查点与当前赛道不匹配');
+  });
+});
+
 describe('确定性（架构地基）', () => {
   it('同一 seed 生成完全相同的赛道', () => {
     const a = JSON.stringify(buildTrack(SEED));

@@ -88,10 +88,15 @@ export interface WorldSnapshot {
   timeMs: number;
   distanceM: number;
   coinCount: number;
+  /** 已拾取的金币下标（渲染层据此恢复检查点画面） */
+  coinsGot: readonly number[];
   /** 已碎裂的碎裂板下标（渲染层据此隐藏） */
   crumblesBroken: readonly number[];
   /** 已拾取的二段跳环下标（渲染层据此隐藏） */
   ringsGot: readonly number[];
+  /** 已拾取的护盾和磁铁下标 */
+  shieldsGot: readonly number[];
+  magnetsGot: readonly number[];
   /** 加速剩余比例 0~1（>0 时渲染金色拖尾） */
   boost: number;
   /** 当前可用的空中二段跳次数（0~2） */
@@ -157,6 +162,8 @@ export class World {
   private _gravDir: 1 | -1 = 1;
   private _hasShield = false;
   private _shieldInvulTicks = 0;
+  /** 激励广告复活后的短暂无敌，不影响输入流和赛道确定性。 */
+  private _reviveInvulTicks = 0;
   private _magnetTicks = 0;
   private _lastCoinTick = -999;
   private _coinCombo = 0;
@@ -192,9 +199,7 @@ export class World {
     for (let i = 0; i < this.platHp.length; i++) {
       if (this.platHp[i] === 0) broken.push(i);
     }
-    const ringsGotArr: number[] = [];
-    for (const i of this._ringsGotIdx) ringsGotArr.push(i);
-    ringsGotArr.sort((a, b) => a - b);
+    const sortedIndices = (values: Set<number>): number[] => Array.from(values).sort((a, b) => a - b);
     this._cachedSnap = {
       tick: this.tick,
       x: this._x,
@@ -207,8 +212,11 @@ export class World {
       timeMs: Math.round((this.tick * 1000) / TICK_RATE),
       distanceM: Math.floor(this._x / 25),
       coinCount: this._coinsGot,
+      coinsGot: sortedIndices(this._coinsGotIdx),
       crumblesBroken: broken,
-      ringsGot: ringsGotArr,
+      ringsGot: sortedIndices(this._ringsGotIdx),
+      shieldsGot: sortedIndices(this._shieldsGotIdx),
+      magnetsGot: sortedIndices(this._magnetsGotIdx),
       boost: this._boostLeft > 0 ? this._boostLeft / BOOST_TICKS : 0,
       airJumps: this._airJumps,
       charge: !this._grounded && this.holding ? Math.min(1, this.holdTicks / HOLD_MAX_TICKS) : 0,
@@ -253,6 +261,7 @@ export class World {
     c._gravDir = this._gravDir;
     c._hasShield = this._hasShield;
     c._shieldInvulTicks = this._shieldInvulTicks;
+    c._reviveInvulTicks = this._reviveInvulTicks;
     c._magnetTicks = this._magnetTicks;
     c._lastCoinTick = this._lastCoinTick;
     c._coinCombo = this._coinCombo;
@@ -276,6 +285,7 @@ export class World {
     this.tick++;
     if (this._boostLeft > 0) this._boostLeft--;
     if (this._shieldInvulTicks > 0) this._shieldInvulTicks--;
+    if (this._reviveInvulTicks > 0) this._reviveInvulTicks--;
     if (this._magnetTicks > 0) this._magnetTicks--;
     if (this.tick - this._lastCoinTick > 48) this._coinCombo = 0; // ~0.8s 连击重置
 
@@ -604,7 +614,24 @@ export class World {
     this._score = Math.floor(this._x * 10) + this._coinsGot * 500;
   }
 
+  /**
+   * 从客户端保存的检查点复活。检查点必须来自本 World 的 clone()，
+   * 因此不会引入非确定性状态或允许任意修改坐标。
+   */
+  reviveFrom(checkpoint: World): void {
+    if (checkpoint.seed !== this.seed || checkpoint.track !== this.track) {
+      throw new Error('复活检查点与当前赛道不匹配');
+    }
+    Object.assign(this, checkpoint.clone());
+    this._alive = true;
+    this._finished = false;
+    this._reviveInvulTicks = 120; // 2 秒（60Hz）
+    this.evq = [];
+    this._cachedSnap = null;
+  }
+
   private die(cause: 'spike' | 'pit' | 'ball' | 'laser'): void {
+    if (this._reviveInvulTicks > 0) return; // 复活后的短暂无敌
     if (this._shieldInvulTicks > 0) return; // 护盾碎裂后短暂无敌
     if (this._hasShield && cause !== 'pit') {
       // 护盾抵扣致死伤害！

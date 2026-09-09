@@ -60,6 +60,17 @@ export class GameView {
     this.worldView.setTrack(track);
   }
 
+  /** 检查点回退后精确恢复赛道动态物件的显示状态。 */
+  restoreDynamicState(snap: WorldSnapshot): void {
+    this.worldView.restoreDynamicState({
+      coinsGot: snap.coinsGot,
+      crumblesBroken: snap.crumblesBroken,
+      ringsGot: snap.ringsGot,
+      shieldsGot: snap.shieldsGot,
+      magnetsGot: snap.magnetsGot,
+    });
+  }
+
   onCoin(i: number): void {
     this.worldView.onCoin(i);
   }
