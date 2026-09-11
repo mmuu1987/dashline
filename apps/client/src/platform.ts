@@ -21,8 +21,8 @@ export interface GamePlatform {
   showRewardedAd(placement: string): Promise<AdResult>;
   showInterstitialAd(placement: string): Promise<AdResult>;
   track(event: string, data?: Record<string, string | number | boolean>): void;
-  /** 后台刷新广告库存（官方 canPlayAd）；仅真实平台需要，缺省为空操作。 */
-  refreshAds?(): void;
+  /** 刷新广告库存（官方 canPlayAd），返回最新可用状态。 */
+  refreshAds?(): Promise<boolean>;
   /** 向平台进度条上报加载进度（1~100）；缺省为空操作。 */
   reportLoadProgress?(percent: number): void;
 }
@@ -36,11 +36,11 @@ class LocalPlatform implements GamePlatform {
   track(_event: string, _data?: Record<string, string | number | boolean>): void { /* no-op */ }
 }
 
-async function adWithTimeout(task: void | Promise<AdResult>): Promise<AdResult> {
+async function adWithTimeout(task: void | Promise<AdResult | void>): Promise<AdResult> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      Promise.resolve(task).then((result) => result ?? 'failed'),
+      Promise.resolve(task).then((result): AdResult => result ?? 'failed'),
       new Promise<AdResult>((resolve) => {
         timeout = setTimeout(() => resolve('failed'), PLATFORM_CONFIG.adTimeoutMs);
       }),
@@ -79,11 +79,13 @@ class BridgePlatform implements GamePlatform {
   isAvailable(): boolean { return this.ready && typeof this.bridge.showRewardedAd === 'function'; }
   async showRewardedAd(placement: string): Promise<AdResult> {
     if (!this.isAvailable() || !this.bridge.showRewardedAd) return 'unavailable';
-    return adWithTimeout(this.bridge.showRewardedAd(placement));
+    const task = Promise.resolve().then<AdResult | void>(() => this.bridge.showRewardedAd!(placement));
+    return adWithTimeout(task);
   }
   async showInterstitialAd(placement: string): Promise<AdResult> {
     if (!this.ready || !this.bridge.showInterstitialAd) return 'unavailable';
-    return adWithTimeout(this.bridge.showInterstitialAd(placement));
+    const task = Promise.resolve().then<AdResult | void>(() => this.bridge.showInterstitialAd!(placement));
+    return adWithTimeout(task);
   }
   track(event: string, data?: Record<string, string | number | boolean>): void {
     try { this.bridge.track?.(event, data); } catch { /* 统计失败不得影响游戏 */ }

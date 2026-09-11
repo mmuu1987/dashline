@@ -94,6 +94,7 @@ export class H5MiniPlatform implements GamePlatform {
   readonly kind = '4399' as const;
   private api: H5MiniApi | undefined;
   private adsAvailable = false;
+  private adsProbeId = 0;
 
   /**
    * @param attempt - 是否尝试接入官方 SDK（'4399' 模式强制、auto 模式需嵌入
@@ -113,7 +114,7 @@ export class H5MiniPlatform implements GamePlatform {
     }
     if (this.api) {
       const remaining = deadline - Date.now();
-      if (remaining > 0) this.adsAvailable = await this.probeAds(remaining);
+      if (remaining > 0) await this.updateAdsAvailability(remaining);
     }
   }
 
@@ -142,19 +143,28 @@ export class H5MiniPlatform implements GamePlatform {
     });
   }
 
-  /** 后台刷新广告库存状态，供下一次结算面板使用。 */
-  refreshAds(): void {
-    if (!this.api) return;
-    void this.probeAds(PLATFORM_CONFIG.initTimeoutMs).then((ok) => {
-      this.adsAvailable = ok;
-    });
+  /** 只允许最后发起的库存探测更新状态，避免异步回调乱序覆盖新结果。 */
+  private async updateAdsAvailability(timeoutMs: number): Promise<boolean> {
+    const probeId = ++this.adsProbeId;
+    const ok = await this.probeAds(timeoutMs);
+    if (probeId === this.adsProbeId) this.adsAvailable = ok;
+    return this.adsAvailable;
+  }
+
+  /** 刷新广告库存状态，并把最新状态返回给调用方以便同步界面。 */
+  async refreshAds(): Promise<boolean> {
+    if (!this.api) {
+      this.adsAvailable = false;
+      return false;
+    }
+    return this.updateAdsAvailability(PLATFORM_CONFIG.initTimeoutMs);
   }
 
   async showRewardedAd(_placement: string): Promise<AdResult> {
     const api = this.api;
     if (!api || typeof api.playAd !== 'function') return 'unavailable';
     // 播放前重新探测：无库存直接返回 unavailable，不消耗本局复活机会
-    this.adsAvailable = await this.probeAds(PLATFORM_CONFIG.initTimeoutMs);
+    this.adsAvailable = await this.updateAdsAvailability(PLATFORM_CONFIG.initTimeoutMs);
     if (!this.adsAvailable) return 'unavailable';
     const result = await new Promise<AdResult>((resolve) => {
       let settled = false;
@@ -176,7 +186,7 @@ export class H5MiniPlatform implements GamePlatform {
         finish('failed');
       }
     });
-    this.refreshAds();
+    void this.refreshAds();
     return result;
   }
 

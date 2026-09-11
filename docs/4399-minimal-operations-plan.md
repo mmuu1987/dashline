@@ -205,7 +205,7 @@ export interface GamePlatform {
   showRewardedAd(placement: string): Promise<AdResult>;
   showInterstitialAd(placement: string): Promise<AdResult>;
   track(event: string, data?: Record<string, string | number | boolean>): void;
-  refreshAds?(): void;
+  refreshAds?(): Promise<boolean>;
   reportLoadProgress?(percent: number): void;
 }
 ```
@@ -457,10 +457,10 @@ export interface GamePlatform {
   - `local` / `off`：禁用一切平台能力，保持纯单机。
 - **平台选择优先级**：官方 SDK（嵌入环境）→ 宿主桥 `window.__DASHLINE_PLATFORM__`（测试用）→ 本地模式。
 - **SDK 加载**：动态注入 `h5api-interface.php`，轮询等待 `h5api.playAd` 就绪（真实实现覆盖 stub 的标志）并完成 `canPlayAd` 库存探测；**脚本等待与探测共享 `initTimeoutMs`（2.5 秒）总预算**，保证平台初始化对启动的最长阻塞不超过 2.5 秒，预算耗尽后按本地模式降级（首次撞毁时会再次后台探测）。
-- **库存探测**：初始化时与每次撞毁后调用 `canPlayAd` 刷新库存；无库存时复活入口不展示、不消耗复活机会。
+- **库存探测**：初始化时与每次撞毁后调用 `canPlayAd` 刷新库存；异步结果返回后会重绘当前结算面板，无库存时复活入口不展示、不消耗复活机会。
 - **播放映射**：`playAd` 回调可能多次触发；仅 `code=10001`（播放结束）映射为 `completed` 并发放复活，`10010`（异常）与超时（30 秒）映射为 `failed`，`10000`（开始播放）为中间状态继续等待。
 - **进度上报**：资源加载期间按 `done/total` 调用 `progress(1~100)`。
-- **安全降级**：SDK 缺失、脚本加载失败、`parent.h5api` 抛错（非 4399 宿主）、回调超时，全部静默降级，不向游戏主循环抛出任何异常。
+- **安全降级**：SDK 缺失、脚本加载失败、`parent.h5api` 抛错（非 4399 宿主）、回调超时，全部静默降级，不向游戏主循环抛出任何异常。广告请求绑定发起时的局次，玩家等待期间重开后，旧回调会被忽略。
 
 ### 12.3 宿主桥（测试与联调备用通道）
 

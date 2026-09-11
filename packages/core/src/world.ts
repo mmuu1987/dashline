@@ -4,7 +4,7 @@
  *  1. 固定步长 STEP_S，时间只来自 tick 计数，禁 Date.now/performance.now；
  *  2. 随机只允许 shared/prng 的 splitmix32；
  *  3. 本文件禁止任何 DOM/BOM/网络访问；
- *  4. 同一 (seed, 输入流) 在浏览器与 Node 中逐位一致 —— 服务端重放验证的前提。
+ *  4. 同一 (seed, 输入流) 在浏览器与 Node 中逐位一致，便于跨环境回归验证。
  */
 import {
   BUFFER_TICKS,
@@ -14,6 +14,8 @@ import {
   IN_DOWN_HELD,
   IN_JUMP_HELD,
   IN_JUMP_PRESS,
+  mix2,
+  splitmix32,
   STEP_S,
   TICK_RATE,
 } from '@dashline/shared';
@@ -521,7 +523,10 @@ export class World {
         this._coinsGotIdx.add(i);
         let bonus = 1;
         if (this._perks.gemMultiplierChance && this._perks.gemMultiplierChance > 0) {
-          const r = ((this.tick * 9301 + 49297) % 233280) / 233280;
+          // 每枚宝石由赛道 seed 与静态下标派生独立随机值；不依赖拾取时机，
+          // 也避免磁铁在同一 tick 收集多枚宝石时结果完全相关。
+          const coinSeed = mix2(Number(this.seed & 0xffff_ffffn), i);
+          const r = splitmix32(coinSeed)();
           if (r < this._perks.gemMultiplierChance) bonus = 2;
         }
         this._coinsGot += bonus;

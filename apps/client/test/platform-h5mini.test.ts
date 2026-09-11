@@ -127,6 +127,44 @@ describe('4399 H5小游戏（h5mini-2.0）官方适配', () => {
     expect(platform.isAvailable()).toBe(false);
   });
 
+  it('refreshAds 等待异步库存结果并返回最新状态', async () => {
+    vi.useFakeTimers();
+    let delayed = false;
+    globalThis.h5api = makeApi({
+      canPlayAd: (cb) => {
+        if (delayed) setTimeout(() => cb({ canPlayAd: false, remain: 0 }), 800);
+        else cb({ canPlayAd: true, remain: 1 });
+      },
+    });
+    const platform = new H5MiniPlatform(true);
+    await platform.init();
+    expect(platform.isAvailable()).toBe(true);
+
+    delayed = true;
+    const refresh = platform.refreshAds();
+    await vi.advanceTimersByTimeAsync(800);
+    await expect(refresh).resolves.toBe(false);
+    expect(platform.isAvailable()).toBe(false);
+  });
+
+  it('并发库存探测乱序返回时只采纳最新结果', async () => {
+    const callbacks: Array<(data: { canPlayAd?: boolean; remain?: number }) => void> = [];
+    globalThis.h5api = makeApi({ canPlayAd: (cb) => callbacks.push(cb) });
+    const platform = new H5MiniPlatform(true);
+    const init = platform.init();
+    await Promise.resolve();
+    callbacks.shift()!({ canPlayAd: true, remain: 2 });
+    await init;
+
+    const older = platform.refreshAds();
+    const newer = platform.refreshAds();
+    callbacks[1]!({ canPlayAd: true, remain: 1 });
+    await expect(newer).resolves.toBe(true);
+    callbacks[0]!({ canPlayAd: false, remain: 0 });
+    await expect(older).resolves.toBe(true);
+    expect(platform.isAvailable()).toBe(true);
+  });
+
   it('reportLoadProgress 将进度裁剪到 1~100 并转发给平台进度条', async () => {
     const progress = vi.fn();
     globalThis.h5api = makeApi({ progress });

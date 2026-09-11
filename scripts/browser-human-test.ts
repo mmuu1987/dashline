@@ -92,7 +92,7 @@ async function runHumanTest(): Promise<void> {
     await context.addInitScript({
       content: `window.__DASHLINE_PLATFORM__ = {
         init: async () => undefined,
-        showRewardedAd: async () => 'completed',
+        showRewardedAd: () => new Promise((resolve) => setTimeout(() => resolve('completed'), 600)),
         track: () => undefined
       };`,
     });
@@ -137,18 +137,26 @@ async function runHumanTest(): Promise<void> {
     assert(resultText.includes('撞毁了'), `未进入预期撞毁结算：${resultText}`);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_02_crash.png') });
 
-    console.log('[5/6] 验证激励广告复活后同局继续，再重新开始...');
+    console.log('[5/6] 验证广告等待时重开隔离，以及复活后同局继续...');
     await requireVisible(page, '#btn-revive', '激励广告复活按钮');
     await page.locator('#btn-revive').click();
+    await page.locator('#btn-retry').click();
+    await page.waitForFunction(() => document.querySelector('#hud-meta')?.textContent?.includes('尝试 #2'));
+    await page.waitForTimeout(700);
+    assert((await page.locator('#hud-meta').innerText()).includes('尝试 #2'), '旧广告回调污染了新一局');
+
+    await requireVisible(page, '#result.show', '重开后的撞毁结算面板');
+    await requireVisible(page, '#btn-revive', '新一局激励广告复活按钮');
+    await page.locator('#btn-revive').click();
     await page.locator('#result').waitFor({ state: 'hidden' });
-    assert((await page.locator('#hud-meta').innerText()).includes('尝试 #1'), '复活不应增加尝试次数');
+    assert((await page.locator('#hud-meta').innerText()).includes('尝试 #2'), '复活不应增加尝试次数');
     await page.waitForTimeout(2_200);
     await requireVisible(page, '#result.show', '复活后的再次结算面板');
     assert(await page.locator('#btn-revive').count() === 0, '同一局不应出现第二次广告复活入口');
     await page.locator('#btn-retry').click();
-    await page.waitForFunction(() => document.querySelector('#hud-meta')?.textContent?.includes('尝试 #2'));
-    const round2Meta = await page.locator('#hud-meta').innerText();
-    assert(round2Meta.includes('尝试 #2'), `重开后尝试次数异常：${round2Meta}`);
+    await page.waitForFunction(() => document.querySelector('#hud-meta')?.textContent?.includes('尝试 #3'));
+    const round3Meta = await page.locator('#hud-meta').innerText();
+    assert(round3Meta.includes('尝试 #3'), `重开后尝试次数异常：${round3Meta}`);
 
     console.log('[6/6] 验证衣橱、成就、天赋、暂停和音频界面...');
     await page.locator('#btn-wardrobe').click();

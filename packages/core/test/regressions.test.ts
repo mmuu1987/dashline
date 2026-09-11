@@ -41,6 +41,23 @@ describe('审计回归护栏', () => {
     expect(world.takeEvents()).toContainEqual({ type: kind, index: 1 });
   });
 
+  it('宝石暴击按 seed 与宝石下标独立派生，而非按拾取 tick 成组触发', () => {
+    const track: Track = {
+      ...itemTrack('shield'),
+      shields: [],
+      coins: [
+        { x: 86, y: START_Y, got: false },
+        { x: 86, y: START_Y, got: false },
+      ],
+    };
+    const world = createWorldWithTrack(2n, track, { gemMultiplierChance: 0.4 });
+    world.step(0);
+
+    // seed=2 时 index 0 不暴击、index 1 暴击；同 tick 收集仍得到独立结果。
+    expect(world.snapshot.coinCount).toBe(3);
+    expect(world.takeEvents().filter((event) => event.type === 'coin')).toHaveLength(2);
+  });
+
   it('固定种子的赛道结构保持黄金摘要', () => {
     expect(fnv1a(JSON.stringify(buildTrack(20260904n)))).toBe('59d70a65');
   });

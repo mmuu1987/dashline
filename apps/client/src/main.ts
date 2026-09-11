@@ -210,6 +210,7 @@ async function boot(): Promise<void> {
   let revivedInRun = false;
   let rewardBusy = false;
   let attemptCommitted = false;
+  let attemptId = 0;
 
   hud.setMode(platform.isAvailable() ? '4399 运营模式' : '纯单机模式');
   platform.track('game_ready');
@@ -219,6 +220,7 @@ async function boot(): Promise<void> {
   }
 
   function resetAttempt(): void {
+    attemptId++;
     world = createWorld(seed, talents.getPerksConfig());
     reviveCheckpoint = world.clone();
     view.setTrack(world.track);
@@ -228,7 +230,6 @@ async function boot(): Promise<void> {
     usedShieldInRun = false;
     nearMissCountInRun = 0;
     revivedInRun = false;
-    rewardBusy = false;
     attemptCommitted = false;
     phase = 'run';
     platform.track('run_start', { attempt: attempts });
@@ -336,6 +337,9 @@ async function boot(): Promise<void> {
 
   async function tryRewardedRevive(): Promise<void> {
     if (rewardBusy || revivedInRun || world.snapshot.finished) return;
+    const rewardAttemptId = attemptId;
+    const rewardWorld = world;
+    const rewardCheckpoint = reviveCheckpoint;
     rewardBusy = true;
     hud.showResult({
       finished: false,
@@ -352,8 +356,10 @@ async function boot(): Promise<void> {
     try {
       platform.track('reward_ad_click');
       const result = await platform.showRewardedAd('revive');
+      // 玩家可在广告等待期间直接重开；旧回调绝不能修改新一局。
+      if (attemptId !== rewardAttemptId || world !== rewardWorld) return;
       if (result === 'completed') {
-        world.reviveFrom(reviveCheckpoint);
+        rewardWorld.reviveFrom(rewardCheckpoint);
         revivedInRun = true;
         attemptCommitted = false;
         phase = 'run';
@@ -373,8 +379,10 @@ async function boot(): Promise<void> {
       platform.track(result === 'cancelled' ? 'reward_ad_cancel' : 'reward_ad_fail', { result });
       hud.toast(result === 'unavailable' ? '暂无可用广告，请直接重新开始' : '广告未完成，未获得复活');
     } catch {
-      platform.track('reward_ad_fail');
-      hud.toast('广告暂时不可用，请直接重新开始');
+      if (attemptId === rewardAttemptId && world === rewardWorld) {
+        platform.track('reward_ad_fail');
+        hud.toast('广告暂时不可用，请直接重新开始');
+      }
     } finally {
       rewardBusy = false;
       if (phase === 'dead' || phase === 'done') showResultPanel();
@@ -536,8 +544,16 @@ async function boot(): Promise<void> {
           const s = world.snapshot;
           view.fx.crash(s.x, s.y);
           commitAttempt();
-          // 撞毁后立刻后台刷新广告库存，结算面板渲染时入口状态即已最新
-          platform.refreshAds?.();
+          // 后台刷新库存；若结果晚于撞毁动画，则在仍处于本局结算时刷新入口。
+          const refreshAttemptId = attemptId;
+          const refresh = platform.refreshAds?.();
+          if (refresh) {
+            void refresh
+              .then(() => {
+                if (attemptId === refreshAttemptId && phase === 'done') showResultPanel();
+              })
+              .catch(() => undefined);
+          }
           break;
         }
         case 'finish': {

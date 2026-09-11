@@ -42,4 +42,16 @@ describe('平台桥接与降级', () => {
     expect(platform.isAvailable()).toBe(false);
     await expect(platform.showRewardedAd('revive')).resolves.toBe('unavailable');
   });
+
+  it('桥初始化成功但广告方法同步抛错时解析为 failed', async () => {
+    globalThis.__DASHLINE_PLATFORM__ = {
+      init: () => undefined,
+      showRewardedAd: () => { throw new Error('reward failed'); },
+      showInterstitialAd: () => { throw new Error('interstitial failed'); },
+    };
+    const platform = createPlatform();
+    await platform.init();
+    await expect(platform.showRewardedAd('revive')).resolves.toBe('failed');
+    await expect(platform.showInterstitialAd('result')).resolves.toBe('failed');
+  });
 });
