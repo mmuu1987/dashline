@@ -287,6 +287,60 @@ async function runHumanTest(): Promise<void> {
     console.log('✓ 纯单机场景：免费复活入口、额度扣减、同局续跑通过');
     await localContext.close();
 
+    // ---- 场景 D：管理员通道（口令开关 + 无限复活）----
+    console.log('[管理员通道场景] 正在验证口令开关与无限复活...');
+    const adminContext = await browser.newContext({
+      viewport: { width: 960, height: 540 },
+      deviceScaleFactor: 1,
+    });
+    const adminErrors: string[] = [];
+    const adminPage = await adminContext.newPage();
+    adminPage.on('pageerror', (error) => adminErrors.push(`pageerror: ${error.message}`));
+
+    // 不带口令时是普通玩家
+    await adminPage.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await adminPage.locator('html[data-dashline-ready="true"]').waitFor({ timeout: 15_000 });
+    assert(
+      !(await adminPage.locator('#hud-mode').innerText()).includes('管理员'),
+      '默认不应开启管理员通道',
+    );
+
+    // 带口令进入：开启并记住
+    await adminPage.goto('http://localhost:5173/?admin=dashline-admin', { waitUntil: 'domcontentloaded' });
+    await adminPage.locator('html[data-dashline-ready="true"]').waitFor({ timeout: 15_000 });
+    assert(
+      (await adminPage.locator('#hud-mode').innerText()).includes('管理员'),
+      '口令正确时未开启管理员通道',
+    );
+
+    // 连续复活 4 次（超过每日 3 次免费额度）都必须仍然可用
+    for (let i = 0; i < 4; i += 1) {
+      await adminPage.locator('#result.show').waitFor({ timeout: 25_000 });
+      const label = await adminPage.locator('#btn-free-revive').innerText();
+      assert(label.includes('无限'), `管理员通道下第 ${i + 1} 次复活应显示无限：${label}`);
+      await adminPage.locator('#btn-free-revive').click();
+      await adminPage.locator('#result').waitFor({ state: 'hidden', timeout: 8_000 });
+    }
+    assert(
+      (await adminPage.locator('#hud-meta').innerText()).includes('尝试 #1'),
+      '管理员通道复活不应增加尝试次数',
+    );
+    await adminPage.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_10_admin_revive.png') });
+
+    // 口令 off：关闭并恢复次数文案
+    await adminPage.goto('http://localhost:5173/?admin=off', { waitUntil: 'domcontentloaded' });
+    await adminPage.locator('html[data-dashline-ready="true"]').waitFor({ timeout: 15_000 });
+    assert(
+      !(await adminPage.locator('#hud-mode').innerText()).includes('管理员'),
+      'admin=off 未关闭管理员通道',
+    );
+    await adminPage.locator('#result.show').waitFor({ timeout: 25_000 });
+    const normalLabel = await adminPage.locator('#btn-free-revive').innerText();
+    assert(normalLabel.includes('剩'), `关闭管理员后应恢复次数文案：${normalLabel}`);
+    assert(adminErrors.length === 0, `管理员通道场景浏览器异常：\n${adminErrors.join('\n')}`);
+    console.log('✓ 管理员通道场景：口令开关、无限复活、可关闭 全部通过');
+    await adminContext.close();
+
     assert(browserErrors.length === 0, `浏览器异常：\n${browserErrors.join('\n')}`);
     assert(sdkErrors.length === 0, `官方 SDK 场景浏览器异常：\n${sdkErrors.join('\n')}`);
     assert(requestFailures.length === 0, `资源请求失败：\n${requestFailures.join('\n')}`);

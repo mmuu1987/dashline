@@ -52,6 +52,21 @@ packages/shared
 
 4399 官方 h5mini-2.0 接口已按官方文档与 SDK 源码完成适配（`canPlayAd` 库存探测、`playAd` 状态码映射、`progress` 进度上报），剩余为平台预览环境的真实广告联调，详见 [4399 最简运营方案](./4399-minimal-operations-plan.md) 第 12 节。
 
+## 管理员通道
+
+`apps/client/src/admin.ts` 提供一个仅供仓库所有者使用的调试通道：`?admin=<口令>` 开启后跳过每日复活额度，`?admin=off` 关闭，选择持久化在 `dl_admin_v1`。开启时 HUD 右下角与复活按钮都会显示管理员标识，不会静默生效。
+
+**它不是权限校验。** 项目没有服务端，口令随产物一起下发，任何人都能从 bundle 里读出来；它的目标是防止普通玩家误触或顺手打开，不是防破解。
+
+构建期开关 `VITE_DASHLINE_ADMIN=0` 会把整段逻辑连同口令字面量一起编译掉。`admin.ts` 里的判断刻意只做字面量比较、不调用 `.trim()` 之类的方法，否则打包器无法常量折叠，口令会残留在 bundle 里。验证方式：
+
+```bash
+VITE_DASHLINE_ADMIN=0 pnpm --filter @dashline/client exec vite build --base=./
+grep -c dashline-admin apps/client/dist/assets/*.js   # 必须为 0
+```
+
+4399 运营包与审核包必须用 `VITE_DASHLINE_ADMIN=0` 构建，详见 [4399 最简运营方案](./4399-minimal-operations-plan.md)。
+
 ## 渲染素材约定
 
 Sunny Land 像素素材按 384×216 绘制，视口 960×540 正好是它的 2.5 倍，因此所有 16px 素材格统一使用 `render/consts.ts` 的 `ART_SCALE`。混用倍率会让同一画面出现多种像素密度，看起来既糊又比例失调。像素素材一律 `scaleMode = 'nearest'`。
@@ -63,4 +78,4 @@ Sunny Land 像素素材按 384×216 绘制，视口 960×540 正好是它的 2.5
 
 ## 数据边界
 
-本地数据包括每日最佳、近七日记录、连续完赛天数、金币、皮肤、成就、天赋和每日复活额度。存档通过 `storage.ts` 安全访问，复杂结构使用带版本的 key，并在读取时校验字段、兼容旧 key 迁移。清除浏览器站点数据会清除这些进度；当前没有云同步或导入导出。平台桥不会上传逐 tick 输入流或完整本地存档。
+本地数据包括每日最佳、近七日记录、连续完赛天数、金币、皮肤、成就、天赋、每日复活额度和管理员通道开关。存档通过 `storage.ts` 安全访问，复杂结构使用带版本的 key，并在读取时校验字段、兼容旧 key 迁移。清除浏览器站点数据会清除这些进度；当前没有云同步或导入导出。平台桥不会上传逐 tick 输入流或完整本地存档。

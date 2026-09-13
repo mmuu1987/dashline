@@ -18,6 +18,8 @@ export interface ResultData {
   onFreeRevive?: () => void;
   /** 今日剩余免费复活次数，仅用于文案。 */
   freeRevivesLeft?: number;
+  /** 管理员通道：次数无限，文案显示为「无限」。 */
+  freeRevivesUnlimited?: boolean;
   rewardBusy?: boolean;
 }
 
@@ -84,8 +86,9 @@ export class Hud {
     const streakTag = d.streak && d.streak > 0 ? ` · 🔥 连续完赛 ${d.streak}天` : '';
     const freeLeft = d.freeRevivesLeft ?? 0;
     const busy = d.rewardBusy ? 'disabled' : '';
+    const freeCount = d.freeRevivesUnlimited ? '无限' : `剩 ${freeLeft}`;
     const freeBtn = d.onFreeRevive
-      ? `<button id="btn-free-revive" class="race-btn" ${busy}>💖 免费复活（剩 ${freeLeft}）</button>`
+      ? `<button id="btn-free-revive" class="race-btn" ${busy}>💖 免费复活（${freeCount}）</button>`
       : '';
     const adBtn = d.onRewardedRevive
       ? `<button id="btn-revive" class="race-btn" ${busy}>${d.rewardBusy ? '广告准备中…' : '▶ 看广告复活'}</button>`

@@ -14,6 +14,7 @@ import {
 } from '@dashline/core';
 import { STEP_S, seedForDate, themeForSeed, todayUTC } from '@dashline/shared';
 import { Sfx } from './audio.js';
+import { AdminChannel } from './admin.js';
 import { loadBestRecord, saveBestRecord, type BestRecord } from './best-record.js';
 import { Hud } from './hud.js';
 import { InputBuffer } from './input.js';
@@ -217,7 +218,13 @@ async function boot(): Promise<void> {
   /** 每日免费复活账本（按 UTC 日期日切，与每日种子同一基准）。 */
   const revives = new ReviveBank(dateStr);
 
-  hud.setMode(platform.isAvailable() ? '4399 运营模式' : '纯单机模式');
+  /** 管理员通道：本轮构建是否允许无限复活（见 admin.ts 的安全说明）。 */
+  const admin = new AdminChannel(window.location.search);
+  const unlimitedRevives = (): boolean => admin.unlimitedRevives();
+
+  hud.setMode(
+    `${platform.isAvailable() ? '4399 运营模式' : '纯单机模式'}${admin.isOn() ? ' · 🛠 管理员（无限复活）' : ''}`,
+  );
   platform.track('game_ready');
 
   function fmtBest(b: BestRecord): string {
@@ -361,17 +368,21 @@ async function boot(): Promise<void> {
     acc = 0;
   }
 
-  /** 免费复活：消耗每日额度，单机模式下也始终可用。 */
+  /** 免费复活：消耗每日额度；管理员通道下不消耗，单机模式也始终可用。 */
   function tryFreeRevive(): void {
     if (rewardBusy || phase === 'run' || world.snapshot.finished) return;
-    if (!revives.consumeFree()) {
+    if (!unlimitedRevives() && !revives.consumeFree()) {
       hud.toast('今日免费复活次数已用完');
       showResultPanel();
       return;
     }
     freeRevivesUsedInRun++;
     applyRevive();
-    hud.toast(`💖 免费复活成功！今日还剩 ${revives.remainingFree()} 次`);
+    hud.toast(
+      unlimitedRevives()
+        ? '🛠 管理员通道：复活次数无限'
+        : `💖 免费复活成功！今日还剩 ${revives.remainingFree()} 次`,
+    );
     platform.track('free_revive_success', { usedInRun: freeRevivesUsedInRun });
   }
 
@@ -423,6 +434,7 @@ async function boot(): Promise<void> {
     const s = world.snapshot;
     const canRevive = !s.finished;
     const freeLeft = revives.remainingFree();
+    const freeUnlimited = unlimitedRevives();
     hud.showResult({
       finished: s.finished,
       timeMs: s.timeMs,
@@ -433,8 +445,9 @@ async function boot(): Promise<void> {
       onRetry: () => resetAttempt(),
       onCard: () => void makeShareCard(),
       onTalents: () => openTalents(),
-      onFreeRevive: canRevive && freeLeft > 0 ? () => tryFreeRevive() : undefined,
+      onFreeRevive: canRevive && (freeUnlimited || freeLeft > 0) ? () => tryFreeRevive() : undefined,
       freeRevivesLeft: freeLeft,
+      freeRevivesUnlimited: freeUnlimited,
       onRewardedRevive: canRevive
         && adRevivesUsedInRun < AD_REVIVES_PER_RUN
         && platform.isAvailable()

@@ -268,6 +268,17 @@ export interface GamePlatform {
 - 插屏与统计开关为代码内预留通路（当前默认不调用）；
 - 不得将通信私钥、支付密钥等服务端秘密打入前端包或提交仓库（当前架构无此类秘密）。
 
+### 6.4 管理员通道必须从平台包编译掉
+
+GitHub Pages 演示构建默认带一个调试用的管理员通道（`?admin=<口令>` 跳过每日复活额度，见 [技术架构](./tech-architecture.md)）。**4399 审核包与运营包必须用 `VITE_DASHLINE_ADMIN=0` 构建**，否则包内会带上一条可绕过广告复活的无限复活后门：
+
+```bash
+VITE_DASHLINE_ADMIN=0 pnpm --filter @dashline/client exec vite build --base=./
+grep -c dashline-admin apps/client/dist/assets/*.js   # 必须为 0
+```
+
+该变量会把整段逻辑连同口令字面量一起编译掉，因此不需要额外的运行时校验；发布前务必执行上面的 `grep` 自检。
+
 ## 7. 执行阶段
 
 > 状态速览（2026-09-09）：阶段 2、3 **已完成**并通过测试与构建验证；阶段 1 的 API 事实部分已取得（见 12.1 节），平台账号、游戏 ID 与广告位仍待办；阶段 4 **未启动**（按计划可选）；阶段 5 **等待平台环境**。
