@@ -270,14 +270,21 @@ export interface GamePlatform {
 
 ### 6.4 管理员通道必须从平台包编译掉
 
-GitHub Pages 演示构建默认带一个调试用的管理员通道（`?admin=<口令>` 跳过每日复活额度，见 [技术架构](./tech-architecture.md)）。**4399 审核包与运营包必须用 `VITE_DASHLINE_ADMIN=0` 构建**，否则包内会带上一条可绕过广告复活的无限复活后门：
+GitHub Pages 演示构建默认带一条调试用的管理员通道，开启后跳过每日复活额度：
+
+| 用途 | 参数 |
+|---|---|
+| 开启 | `?admin=dashline-admin`（默认口令，可用 `VITE_DASHLINE_ADMIN_TOKEN` 覆盖） |
+| 关闭 | `?admin=off` |
+
+**4399 审核包与运营包必须用 `VITE_DASHLINE_ADMIN=0` 构建**，否则包内会带上一条可绕过广告复活的无限复活后门：
 
 ```bash
 VITE_DASHLINE_ADMIN=0 pnpm --filter @dashline/client exec vite build --base=./
-grep -c dashline-admin apps/client/dist/assets/*.js   # 必须为 0
+grep -c dashline-admin apps/client/dist/assets/*.js   # 必须输出 0
 ```
 
-该变量会把整段逻辑连同口令字面量一起编译掉，因此不需要额外的运行时校验；发布前务必执行上面的 `grep` 自检。
+该变量会把整段逻辑连同口令字面量一起编译掉，因此不需要额外的运行时校验；发布前务必执行上面的 `grep` 自检。接口与实现细节见 [技术架构](./tech-architecture.md) 的「管理员通道」一节。
 
 ## 7. 执行阶段
 
@@ -407,6 +414,7 @@ grep -c dashline-admin apps/client/dist/assets/*.js   # 必须为 0
 - [ ] `pnpm build` 通过；
 - [ ] `pnpm test:browser` 通过；
 - [ ] `git diff --check` 通过；
+- [ ] **管理员模式已移除**：以 `VITE_DASHLINE_ADMIN=0` 构建，且 `grep -c dashline-admin apps/client/dist/assets/*.js` 输出 `0`（见 6.4 节）；
 - [ ] 审核与生产配置分离；
 - [ ] 生产包不包含测试密钥或服务端秘密；
 - [ ] 正式包和上一稳定版回滚包已留存。

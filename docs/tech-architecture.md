@@ -54,18 +54,32 @@ packages/shared
 
 ## 管理员通道
 
-`apps/client/src/admin.ts` 提供一个仅供仓库所有者使用的调试通道：`?admin=<口令>` 开启后跳过每日复活额度，`?admin=off` 关闭，选择持久化在 `dl_admin_v1`。开启时 HUD 右下角与复活按钮都会显示管理员标识，不会静默生效。
+`apps/client/src/admin.ts` 提供一条仅供仓库所有者使用的调试通道：开启后跳过每日复活额度。
+
+| 用途 | 参数 | 说明 |
+|---|---|---|
+| **开启** | `?admin=dashline-admin` | 默认口令；写入存档后长期生效，不用每次带参数 |
+| **关闭** | `?admin=off` | 同时接受 `0` / `false` / `no`；会清掉存档状态 |
+
+GitHub Pages 演示站的完整链接（建议只把「开启」存书签）：
+
+- 开启：`https://mmuu1987.github.io/dashline/?admin=dashline-admin`
+- 关闭：`https://mmuu1987.github.io/dashline/?admin=off`
+
+口令可用构建变量 `VITE_DASHLINE_ADMIN_TOKEN` 覆盖；未设置时就是上表里的默认口令。开关持久化在 `dl_admin_v1`，开启时 HUD 右下角与复活按钮都会显示管理员标识，不会静默生效。口令打错时参数会被忽略（而不是强制关闭），避免误输入丢掉已开启的通道。
 
 **它不是权限校验。** 项目没有服务端，口令随产物一起下发，任何人都能从 bundle 里读出来；它的目标是防止普通玩家误触或顺手打开，不是防破解。
 
-构建期开关 `VITE_DASHLINE_ADMIN=0` 会把整段逻辑连同口令字面量一起编译掉。`admin.ts` 里的判断刻意只做字面量比较、不调用 `.trim()` 之类的方法，否则打包器无法常量折叠，口令会残留在 bundle 里。验证方式：
+### ⚠️ 正式发包前必须移除
+
+4399 审核包与运营包必须用 `VITE_DASHLINE_ADMIN=0` 构建，否则包里会带上一条**能绕过广告复活的无限复活后门**：
 
 ```bash
 VITE_DASHLINE_ADMIN=0 pnpm --filter @dashline/client exec vite build --base=./
-grep -c dashline-admin apps/client/dist/assets/*.js   # 必须为 0
+grep -c dashline-admin apps/client/dist/assets/*.js   # 必须输出 0
 ```
 
-4399 运营包与审核包必须用 `VITE_DASHLINE_ADMIN=0` 构建，详见 [4399 最简运营方案](./4399-minimal-operations-plan.md)。
+该变量会把整段逻辑连同口令字面量一起编译掉。`admin.ts` 里的判断刻意只做字面量比较、不调用 `.trim()` 之类的方法，否则打包器无法常量折叠，口令会残留在 bundle 里（早期写法踩过这个坑：`VITE_DASHLINE_ADMIN=0` 时两次构建产物字节数完全相同，开关形同虚设）。发布前务必执行上面的 `grep` 自检，确认输出为 `0`。
 
 ## 渲染素材约定
 

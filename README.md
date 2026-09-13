@@ -36,6 +36,8 @@ pnpm preview
 
 游戏默认纯单机运行。当构建产物被 4399 平台以 iframe 嵌入时，客户端会自动接入官方 H5小游戏 SDK（激励广告复活、平台进度条），任何平台失败都降级为纯单机，本地直开不受影响。构建变量 `VITE_DASHLINE_PLATFORM` 可强制开关。详见 [4399 最简运营方案](./docs/4399-minimal-operations-plan.md)。
 
+> ⚠️ **正式发包前必须移除管理员模式。** 演示构建带有一条调试用的管理员通道（开启口令见 [技术架构](./docs/tech-architecture.md) 的「管理员通道」一节），它会跳过每日复活额度，用在线上等于一条绕过广告复活的免费后门。4399 审核包与运营包必须以 `VITE_DASHLINE_ADMIN=0` 构建，并确认 `grep -c dashline-admin apps/client/dist/assets/*.js` 输出 `0`。
+
 ## 工程结构
 
 | 路径 | 职责 |
