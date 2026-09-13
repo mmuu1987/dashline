@@ -112,7 +112,7 @@ grep -c dashline-admin apps/client/dist/assets/*.js   # 必须输出 0
 
 Sunny Land 像素素材按 384×216 绘制，视口 960×540 正好是它的 2.5 倍，因此所有 16px 素材格统一使用 `render/consts.ts` 的 `ART_SCALE`。混用倍率会让同一画面出现多种像素密度，看起来既糊又比例失调。像素素材一律 `scaleMode = 'nearest'`。
 
-- 草皮与泥土从 `art/tileset.png` 各取三个变体横向拼成 48×16 的条带再平铺，避免 16px 图案硬重复；`art/ground_top.png` 与 `art/ground_fill.png` 已不再用于跑道渲染。
+- 草皮与泥土从 `art/tileset.png` 各取三个变体横向拼成 48×16 的条带再平铺，避免 16px 图案硬重复。早期版本的 `art/ground_top.png`、`art/ground_fill.png` 以及整图 `ground.png`、`plank.png`、`coin.png`、`cloud.png` 已被取代，连同全透明的 `art/shrooms.png` 与未使用的 `art/gem-5.png`、`art/gem-6.png` 一并从仓库删除；新增素材前请先确认它真的会被 `textures.ts` 的 `ASSET_URLS` 加载。
 - 地面装饰（草簇、高草、小灌木）取自 tileset 第 7 行的透明底格子。
 - 平台与碎裂板受关卡设计约束（平台离地最低 24px、层间 42px），厚度保持薄板 22px，不随 `ART_SCALE` 放大；但板身必须贴在判定面之下，与判定线对齐。
 - `art/forest.png` 上半部是透明底树冠、下半部是一整块纯色暗块，因此只截取树冠条带并按整数倍放大，不再整张缩小。
