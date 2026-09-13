@@ -75,9 +75,27 @@ export class WorldView {
     this.gateDiodes = [];
     this.windStreams = [];
 
-    // 坑底暗色
+    // 坑底暗色。
+    // 地面高度可变之后不能再画成"从 GROUND_Y 开始的一条通栏"：
+    // 谷地（y > GROUND_Y）上方会被这条暗色盖住，看起来像一条横贯屏幕的黑带。
+    // 改为「全局底色从最低地面开始」+「每个坑单独补一块到本处地面」。
+    const gsSorted = [...track.grounds].sort((a, b) => a.x0 - b.x0);
+    const deepestY = gsSorted.reduce((m, g) => Math.max(m, g.y), GROUND_Y);
+    const bottomY = VIEW_H + 80;
     const backdrop = new Graphics();
-    backdrop.rect(-400, GROUND_Y + 2, track.length + 800, VIEW_H - GROUND_Y + 80).fill(0x0c101c);
+    backdrop
+      .rect(-400, deepestY, track.length + 800, bottomY - deepestY)
+      .fill(0x0c101c);
+    for (let i = 0; i + 1 < gsSorted.length; i++) {
+      const a = gsSorted[i]!;
+      const b = gsSorted[i + 1]!;
+      const gapW = b.x0 - a.x1;
+      if (gapW <= 0) continue;
+      // 坑口取两侧较低的那个面（y 越大越低），向下补暗色
+      const lip = Math.max(a.y, b.y);
+      if (lip >= deepestY) continue; // 已在全局底色覆盖范围内
+      backdrop.rect(a.x1, lip, gapW, bottomY - lip).fill(0x0c101c);
+    }
     this.root.addChild(backdrop);
 
     // 地面段：草顶行 + 泥土填充（统一 ART_SCALE，草皮由 3 变体拼接）
@@ -88,18 +106,18 @@ export class WorldView {
       if (w <= 0) continue;
       const top = new TilingSprite({ texture: this.assets.groundTop, width: w, height: TOP_H });
       top.tileScale.set(GS);
-      top.position.set(seg.x0, GROUND_Y);
+      top.position.set(seg.x0, seg.y);
       this.root.addChild(top);
-      const fillH = VIEW_H - GROUND_Y - TOP_H + 40;
+      const fillH = VIEW_H - seg.y - TOP_H + 40;
       if (fillH > 0) {
         const fill = new TilingSprite({ texture: this.assets.groundFill, width: w, height: fillH });
         fill.tileScale.set(GS);
-        fill.position.set(seg.x0, GROUND_Y + TOP_H);
+        fill.position.set(seg.x0, seg.y + TOP_H);
         this.root.addChild(fill);
       }
       const lip = new Graphics();
       lip.rect(0, 0, w, 3).fill({ color: 0xd9ffb0, alpha: 0.35 });
-      lip.position.set(seg.x0, GROUND_Y - 1);
+      lip.position.set(seg.x0, seg.y - 1);
       this.root.addChild(lip);
     }
 
@@ -185,10 +203,11 @@ export class WorldView {
       this.root.addChild(g);
     });
 
-    // 弹跳菇
+    // 弹跳菇（贴合所在地面段高度）
     for (const pad of track.pads) {
+      const py = this.terrainTopAt(pad.x + pad.w / 2);
       const stem = new Graphics();
-      stem.roundRect(pad.x + pad.w / 2 - 7, GROUND_Y - 16, 14, 16, 4).fill(0xe8edf5);
+      stem.roundRect(pad.x + pad.w / 2 - 7, py - 16, 14, 16, 4).fill(0xe8edf5);
       this.root.addChild(stem);
       const cap = new Graphics();
       cap
@@ -198,14 +217,15 @@ export class WorldView {
         .stroke({ width: 2.5, color: 0x3e8f4a });
       cap.circle(-pad.w * 0.18, -10, 5).fill(0xffffff);
       cap.circle(pad.w * 0.15, -13, 7).fill(0xffe08a);
-      cap.position.set(pad.x + pad.w / 2, GROUND_Y - 14);
+      cap.position.set(pad.x + pad.w / 2, py - 14);
       this.padCaps.push(cap);
       this.root.addChild(cap);
     }
 
     // 尖刺 / 悬空双面致命刺梁
     for (const hz of track.hazards) {
-      const isBar = hz.y + hz.h < GROUND_Y - 60;
+      // 用所在地面高度判断：地面刺贴着地形，悬空刺梁离地很高
+      const isBar = hz.y + hz.h < this.terrainTopAt(hz.x) - 60;
       if (isBar) {
         const beam = new Graphics();
         beam.roundRect(hz.x, hz.y, hz.w, hz.h, 3).fill(0x1e2432);
@@ -321,12 +341,13 @@ export class WorldView {
       }
     }
 
-    // 加速带
+    // 加速带（贴合所在地面高度）
     for (const z of track.boosts) {
+      const zy = this.terrainTopAt(z.x + z.w / 2);
       const root = new Container();
       const base = new Graphics();
-      base.rect(z.x, GROUND_Y - 6, z.w, 6).fill({ color: 0xffd23f, alpha: 0.28 });
-      base.rect(z.x, GROUND_Y - 2, z.w, 2).fill({ color: 0xffe08a, alpha: 0.85 });
+      base.rect(z.x, zy - 6, z.w, 6).fill({ color: 0xffd23f, alpha: 0.28 });
+      base.rect(z.x, zy - 2, z.w, 2).fill({ color: 0xffe08a, alpha: 0.85 });
       root.addChild(base);
       const chevrons: Graphics[] = [];
       const bx: number[] = [];
@@ -443,14 +464,14 @@ export class WorldView {
           const d = new Sprite(decor);
           d.anchor.set(0.5, 1);
           d.scale.set(ART_SCALE);
-          d.position.set(x, GROUND_Y + 3);
+          d.position.set(x, seg.y + 3);
           this.root.addChild(d);
           // 偶发放置大件道具，避免小块装饰铺满整条跑道
           if (r() < 0.3) {
             const s = new Sprite(bigProps[Math.floor(r() * bigProps.length)]!);
             s.anchor.set(0.5, 1);
             s.scale.set(ART_SCALE);
-            s.position.set(x + 54 + r() * 40, GROUND_Y + 3);
+            s.position.set(x + 54 + r() * 40, seg.y + 3);
             this.root.addChild(s);
           }
         }
@@ -584,6 +605,18 @@ export class WorldView {
     return rg ? { x: rg.x, y: rg.y } : null;
   }
 
+  /** x 处的地面顶面 y；不在任何地面段上时回退到基准高度 */
+  terrainTopAt(x: number): number {
+    const t = this.track;
+    if (!t) return GROUND_Y;
+    let best: number | null = null;
+    for (const s of t.grounds) {
+      if (x < s.x0 || x > s.x1) continue;
+      if (best === null || Math.abs(s.y - GROUND_Y) < Math.abs(best - GROUND_Y)) best = s.y;
+    }
+    return best ?? GROUND_Y;
+  }
+
   surfaceYBelow(x: number, fromY: number): number | null {
     const t = this.track;
     if (!t) return null;
@@ -591,7 +624,7 @@ export class WorldView {
     const half = 8;
     for (const s of t.grounds) {
       if (x + half < s.x0 || x - half > s.x1) continue;
-      if (GROUND_Y >= fromY && (best === null || GROUND_Y < best)) best = GROUND_Y;
+      if (s.y >= fromY && (best === null || s.y < best)) best = s.y;
     }
     for (const p of t.plats) {
       if (p.inverted) continue;
@@ -667,7 +700,7 @@ export class WorldView {
         const ch = b.chevrons[i]!;
         const rawX = b.bx[i]! + offset;
         const lx = ((rawX % b.zw) + b.zw) % b.zw;
-        ch.position.set(b.zx + lx, GROUND_Y);
+        ch.position.set(b.zx + lx, this.terrainTopAt(b.zx + lx));
       }
     }
     // 气流柱向上飘动的气流粒子线

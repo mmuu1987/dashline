@@ -27,12 +27,12 @@ class TB {
     this.cursor += dx;
   }
   gap(w: number): void {
-    this.grounds.push({ x0: this.segStart, x1: this.cursor });
+    this.grounds.push({ x0: this.segStart, x1: this.cursor, y: GROUND_Y });
     this.cursor += w;
     this.segStart = this.cursor;
   }
   close(): void {
-    this.grounds.push({ x0: this.segStart, x1: this.cursor });
+    this.grounds.push({ x0: this.segStart, x1: this.cursor, y: GROUND_Y });
   }
   track(finishPad = 400): Track {
     const finishX = this.cursor;

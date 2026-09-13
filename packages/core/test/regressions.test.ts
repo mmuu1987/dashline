@@ -3,7 +3,7 @@ import { GROUND_Y, START_Y, buildTrack, createWorldWithTrack, type Track } from 
 
 function itemTrack(kind: 'shield' | 'magnet'): Track {
   return {
-    grounds: [{ x0: -1_000, x1: 1_000 }],
+    grounds: [{ x0: -1_000, x1: 1_000, y: GROUND_Y }],
     hazards: [],
     coins: [],
     plats: [],
@@ -59,6 +59,7 @@ describe('审计回归护栏', () => {
   });
 
   it('固定种子的赛道结构保持黄金摘要', () => {
-    expect(fnv1a(JSON.stringify(buildTrack(20260904n)))).toBe('59d70a65');
+    // core.14：赛道长度翻倍 + 难度解锁改为绝对距离 + 新增高低地形积木
+    expect(fnv1a(JSON.stringify(buildTrack(20260904n)))).toBe('e2210c02');
   });
 });

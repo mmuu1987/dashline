@@ -42,6 +42,7 @@ import {
   PLAYER_R,
   TUNING,
   CRUMBLE_TICKS,
+  GROUND_STEP_MAX,
   bounceV,
   BOOST_FACTOR,
   BOOST_TICKS,
@@ -362,9 +363,16 @@ export class World {
       const mv = this.moverUnder(x, half);
       if (mv !== null) {
         this._y = this.moverTop(mv, this.tick) - PLAYER_R * this._gravDir;
-      } else if (!this.hasSupportAt(x, half)) {
-        this._grounded = false;
-        this.coyote = COYOTE_TICKS;
+      } else {
+        // 贴地吸附到当前地面段的高度：上坡自动抬升、下坡自动跟随，
+        // 落差超过 GROUND_STEP_MAX 时视为悬崖并转入离地坠落。
+        const gy = this.groundTopUnder(x, half);
+        if (gy !== null && Math.abs(this._y + PLAYER_R - gy) <= GROUND_STEP_MAX) {
+          this._y = gy - PLAYER_R;
+        } else if (!this.hasSupportAt(x, half)) {
+          this._grounded = false;
+          this.coyote = COYOTE_TICKS;
+        }
       }
     } else if (this._dashTicks > 0) {
       // 冲刺期间重力冻结，沿水平线突进
@@ -657,8 +665,13 @@ export class World {
 
   private hasSupportAt(x: number, half: number): boolean {
     if (this._gravDir === 1) {
+      const feet = this._y + PLAYER_R;
       for (const g of this.track.grounds) {
-        if (x + half > g.x0 && x - half < g.x1) return true;
+        if (x + half > g.x0 && x - half < g.x1) {
+          // 贴地容差：允许跨过 ≤GROUND_STEP_MAX 的台阶（坡道就是阶梯拼的），
+          // 超过则视为悬崖，交给离地坠落处理。
+          if (Math.abs(feet - g.y) <= GROUND_STEP_MAX) return true;
+        }
       }
     }
     for (let i = 0; i < this.track.plats.length; i++) {
@@ -672,6 +685,21 @@ export class World {
       }
     }
     return false;
+  }
+
+  /** 当前脚下地面段的顶面 y；不在任何地面段上时返回 null */
+  private groundTopUnder(x: number, half: number): number | null {
+    if (this._gravDir !== 1) return null;
+    let best: number | null = null;
+    for (const g of this.track.grounds) {
+      if (x + half > g.x0 && x - half < g.x1) {
+        // 多段重叠时取最靠近当前脚底的一段
+        if (best === null || Math.abs(g.y - (this._y + PLAYER_R)) < Math.abs(best - (this._y + PLAYER_R))) {
+          best = g.y;
+        }
+      }
+    }
+    return best;
   }
 
   private moverUnder(x: number, half: number): Plat | null {
@@ -696,11 +724,13 @@ export class World {
   ): number | null {
     let bestTop: number | null = null;
     if (this._gravDir === 1) {
-      // 正向重力：地面
+      // 正向重力：地面（按各地面段自身高度判定）
       for (const g of this.track.grounds) {
         if (x + half > g.x0 && x - half < g.x1) {
-          if (prevFeet <= GROUND_Y && feet >= GROUND_Y) {
-            bestTop = GROUND_Y;
+          if (prevFeet <= g.y && feet >= g.y) {
+            if (bestTop === null || g.y < bestTop) {
+              bestTop = g.y;
+            }
           }
         }
       }

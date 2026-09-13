@@ -243,6 +243,16 @@ export const EDGE_FORGIVE = PLAYER_R * 0.6;
 /** 越过宽为 gap 的坑实际需要的水平位移 */
 export const effectiveGapNeed = (gap: number): number => gap - 2 * EDGE_FORGIVE;
 
+// ---------- 地形起伏 ----------
+/** 坡道单级台阶高度上限：ramp() 按它把总落差拆成阶梯 */
+export const RAMP_STEP_PX = 10;
+/** 坡道单级台阶的最小宽度（px）：保证陡坡也是"缓台阶"而不是 7px 宽的锯齿 */
+export const RAMP_MIN_STEP_W = 26;
+/** 贴地行走能自动跨越的台阶容差（px）。
+ *  必须 > RAMP_STEP_PX 留出取整余量：坡道是阶梯拼的，玩家靠这个容差自动上下坡。
+ *  超过这个落差会被判定为"悬崖"（离地坠落）而不是硬贴上去。 */
+export const GROUND_STEP_MAX = 12;
+
 // ---------- 坑宽度分档（占长按跳距离的比例）----------
 export const GAP_TIERS = [
   [0.38, 0.54], // easy：点按也能过

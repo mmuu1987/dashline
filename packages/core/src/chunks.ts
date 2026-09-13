@@ -13,6 +13,8 @@ import {
 import {
   PLAYER_R,
   PENDULUM_R,
+  RAMP_MIN_STEP_W,
+  RAMP_STEP_PX,
   UPDRAFT_G_FACTOR,
   boostRange,
   bounceHeight,
@@ -38,16 +40,25 @@ function arch01(t: number): number {
 export type { GateDef, PortalDef, ShieldDef, MagnetDef } from './tuning.js';
 
 /** 世界常量（渲染层也从这里取） */
-export const GROUND_Y = 460; // 地面顶部 y
+export const GROUND_Y = 460; // 地面顶部 y（基准高度）
 export const PIT_Y = 720; // 掉出此深度判死
 export const CEILING_Y = 80; // 天花板倒挂基准 y
-export const TARGET_LEN = 19000; // 目标赛道长度 px（约 53s）
+export const TARGET_LEN = 36000; // 目标赛道长度 px（约 100s）
 export const SPIKE_W = 34;
 export const SPIKE_H = 26;
+
+/** 地形起伏上限：相对 GROUND_Y 最多抬高多少 px（保证画面与坑深逻辑不被破坏） */
+export const TERRAIN_UP_MAX = 120;
+/** 地形起伏下限：相对 GROUND_Y 最多下沉多少 px */
+export const TERRAIN_DOWN_MAX = 40;
+/** 坡顶后到第一个障碍的最小距离：保证玩家翻过坡顶后有反应时间 */
+export const SPIKE_MIN_LEAD = 150;
 
 export interface GroundSeg {
   x0: number;
   x1: number;
+  /** 地面顶部 y；基准为 GROUND_Y，坡道由 ≤GROUND_STEP_MAX 的台阶拼成 */
+  y: number;
 }
 export interface Hazard {
   x: number;
@@ -114,10 +125,12 @@ export interface Track {
   length: number;
 }
 
-/** 赛道拼装器：维护地面连续段与游标 */
+/** 赛道拼装器：维护地面连续段、当前地面高度与游标 */
 class Builder {
   cursor = 0;
   private segStart = -400; // 起点前留一段，绝不出生长在坑上
+  /** 当前地面段的顶面 y；ramp 会逐级改变它 */
+  private segY = GROUND_Y;
   grounds: GroundSeg[] = [];
   hazards: Hazard[] = [];
   coins: Coin[] = [];
@@ -136,19 +149,65 @@ class Builder {
     this.cursor += dx;
   }
 
-  /** 挖一个宽 w 的坑（断开当前地面段） */
-  gap(w: number): void {
+  /** 收束当前地面段（长度为 0 时不产生空段） */
+  private flush(): void {
     if (this.cursor > this.segStart) {
-      this.grounds.push({ x0: this.segStart, x1: this.cursor });
+      this.grounds.push({ x0: this.segStart, x1: this.cursor, y: this.segY });
     }
+  }
+
+  /** 挖一个宽 w 的坑（断开当前地面段）；坑对岸保持同一高度 */
+  gap(w: number): void {
+    this.flush();
     this.cursor += w;
     this.segStart = this.cursor;
   }
 
-  close(): void {
-    if (this.cursor > this.segStart) {
-      this.grounds.push({ x0: this.segStart, x1: this.cursor });
+  /**
+   * 阶梯坡道：把总落差 dy 拆成若干 ≤RAMP_STEP_PX 的台阶。
+   * 玩家靠 GROUND_STEP_MAX 的贴地容差自动上下坡，因此不需要斜坡碰撞，
+   * 视觉上也是像素游戏常见的"阶梯山丘"。
+   */
+  ramp(dx: number, dy: number): void {
+    const steps = Math.max(1, Math.ceil(Math.abs(dy) / RAMP_STEP_PX));
+    const stepDx = dx / steps;
+    const stepDy = dy / steps;
+    let y = this.segY;
+    for (let i = 0; i < steps; i++) {
+      // 顺序很重要：先用"当前高度"收束刚走过的一段，再抬高/降低进入下一段。
+      // 反过来会把整段路记成新高度，等于地面提前一步变化。
+      this.cursor += stepDx;
+      this.flush();
+      y += stepDy;
+      this.segY = Math.round(y);
+      this.segStart = this.cursor;
     }
+  }
+
+  /**
+   * 坡道到绝对高度 targetY。
+   * 地形积木一律用这个而不是 ramp(相对量)：相对量在多次调用之间会累积，
+   * 一旦某块忘记抵消就会把地面越推越高/越挖越深。
+   * dx 不足时自动放慢坡度，保证每级台阶至少有 RAMP_MIN_STEP_W 宽。
+   */
+  rampTo(dx: number, targetY: number): void {
+    const dy = targetY - this.segY;
+    if (Math.abs(dy) < 1) {
+      this.run(dx);
+      return;
+    }
+    const steps = Math.ceil(Math.abs(dy) / RAMP_STEP_PX);
+    const need = steps * RAMP_MIN_STEP_W;
+    this.ramp(Math.max(dx, need), dy);
+  }
+
+  /** 当前地面段顶面 y（供积木把刺/金币等贴在正确高度） */
+  groundTop(): number {
+    return this.segY;
+  }
+
+  close(): void {
+    this.flush();
   }
 }
 
@@ -534,25 +593,122 @@ type ChunkName =
   | 'gate'
   | 'gravityportal'
   | 'shield'
-  | 'magnet';
+  | 'magnet'
+  | 'hill'
+  | 'valley'
+  | 'mesa'
+  | 'rolling';
+
+// -------------------------------------------------------------
+// 地形积木（第五批）：高低地面。
+// 约定：每个地形块结束前必须 ramp 回基准高度 GROUND_Y，
+// 这样其余积木可以继续假定"地面在 GROUND_Y"，不必逐个适配。
+// -------------------------------------------------------------
+
+/** 山丘：上坡 → 平台顶 → 下坡，顶上有刺或金币奖励 */
+function chHill(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 140, 200));
+  const upW = rngRange(r, 220, 320);
+  const topW = rngRange(r, 180, 300);
+  const peak = rngRange(r, 60, TERRAIN_UP_MAX);
+  b.rampTo(upW, GROUND_Y - peak);
+  const topY = b.groundTop();
+  // 丘顶金币拱
+  const n = 4;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 1) / (n + 1);
+    b.coins.push({ x: b.cursor + t * topW, y: topY - 34 - arch01(t) * 46, got: false });
+  }
+  // 半数山丘在丘顶放一道刺，逼玩家控制上下坡节奏。
+  // 位置至少离丘顶起点 SPIKE_MIN_LEAD 远：玩家刚翻过坡顶就被刺扎到不公平。
+  if (r() < 0.5) {
+    const sx = b.cursor + Math.max(SPIKE_MIN_LEAD, topW * rngRange(r, 0.45, 0.7));
+    if (sx < b.cursor + topW - SPIKE_W) {
+      b.hazards.push({ x: sx, y: topY - SPIKE_H, w: SPIKE_W, h: SPIKE_H });
+    }
+  }
+  b.run(topW);
+  b.rampTo(upW * rngRange(r, 0.85, 1.15), GROUND_Y);
+  b.run(rngRange(r, 120, 180));
+}
+
+/** 谷地：下沉 → 谷底 → 爬升，谷底放弹跳菇或金币 */
+function chValley(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 130, 190));
+  const downW = rngRange(r, 200, 300);
+  const floorW = rngRange(r, 180, 300);
+  const depth = rngRange(r, 26, TERRAIN_DOWN_MAX);
+  b.rampTo(downW, GROUND_Y + depth);
+  const floorY = b.groundTop();
+  for (let i = 0; i < 3; i++) {
+    b.coins.push({ x: b.cursor + ((i + 1) / 4) * floorW, y: floorY - 40, got: false });
+  }
+  if (r() < 0.45) {
+    b.pads.push({ x: b.cursor + floorW * 0.4, w: 48 });
+  }
+  b.run(floorW);
+  b.rampTo(downW * rngRange(r, 0.85, 1.15), GROUND_Y);
+  b.run(rngRange(r, 120, 180));
+}
+
+/** 高台：抬升到高处跑一段，末端降回；高台边缘有落差，需要跳下 */
+function chMesa(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 140, 200));
+  const upW = rngRange(r, 200, 280);
+  const topW = rngRange(r, 300, 520);
+  const rise = rngRange(r, 70, TERRAIN_UP_MAX);
+  b.rampTo(upW, GROUND_Y - rise);
+  const topY = b.groundTop();
+  const coinCnt = rngInt(r, 2, 5);
+  const step = topW / (coinCnt + 1);
+  for (let i = 1; i <= coinCnt; i++) {
+    b.coins.push({ x: b.cursor + i * step, y: topY - rngRange(r, 30, 52), got: false });
+  }
+  b.run(topW);
+  // 高台末端下降：用台阶而不是悬崖，避免"必须精准跳跃"的强制失败点
+  b.rampTo(upW * rngRange(r, 0.6, 0.9), GROUND_Y);
+  b.run(rngRange(r, 130, 190));
+}
+
+/** 连绵起伏：连续两三个波峰波谷，纯地形变化不给障碍 */
+function chRolling(b: Builder, r: Rng): void {
+  b.run(rngRange(r, 120, 180));
+  const waves = rngInt(r, 2, 3);
+  for (let i = 0; i < waves; i++) {
+    const w = rngRange(r, 200, 300);
+    const amp = rngRange(r, 34, 92);
+    // 每波都以绝对高度为目标：上/下交替但始终夹在 [GROUND_Y-TERRAIN_UP_MAX, GROUND_Y+TERRAIN_DOWN_MAX] 内
+    const up = i % 2 === 0;
+    b.rampTo(w, up ? GROUND_Y - amp : GROUND_Y + Math.min(amp, TERRAIN_DOWN_MAX));
+    const y = b.groundTop();
+    b.coins.push({ x: b.cursor + w * 0.5, y: y - 42, got: false });
+    b.run(w);
+  }
+  b.rampTo(rngRange(r, 220, 320), GROUND_Y);
+  b.run(rngRange(r, 120, 180));
+}
 
 function pickChunk(b: Builder, r: Rng): void {
-  const names: ChunkName[] = ['flat', 'gap0', 'spike0', 'stairs', 'bonus'];
-  const weights = [2, 2, 3, 2, 2];
-  const p = b.cursor / TARGET_LEN;
-  if (p >= 0.2) {
+  // 基础池：起步就能见到的积木，地形块从一开局就参与（让前 15 秒就有起伏）
+  const names: ChunkName[] = ['flat', 'gap0', 'spike0', 'stairs', 'bonus', 'hill', 'valley'];
+  const weights = [2, 2, 3, 2, 2, 3, 2];
+  // 解锁门槛用"绝对距离"而不是赛道百分比：赛道拉长后，百分比门槛会把
+  // 有趣的积木推到很后面（原来 0.55 在 19000px 时约 29s，在 36000px 时
+  // 会变成 55s），等于整条赛道有一半是新手区。这里改用 px 保持"秒数"不变。
+  const x = b.cursor;
+  if (x >= 2400) {
     names.push('gap1', 'spike1', 'lowbar', 'shield', 'magnet');
     weights.push(2, 3, 3, 1, 1);
   }
-  if (p >= 0.35) {
+  if (x >= 5000) {
     names.push('padpit', 'crumble', 'elevator', 'updraft', 'gravityportal');
     weights.push(2, 2, 2, 2, 2);
   }
-  if (p >= 0.45) {
-    names.push('crumblestairs', 'gate');
-    weights.push(2, 2);
+  if (x >= 7600) {
+    names.push('crumblestairs', 'gate', 'mesa', 'rolling');
+    weights.push(2, 2, 3, 2);
   }
-  if (p >= 0.55) {
+  if (x >= 10400) {
     names.push('gap2', 'spike2', 'boost', 'ring', 'pendulum');
     weights.push(2, 3, 2, 2, 2);
   }
@@ -602,6 +758,14 @@ function pickChunk(b: Builder, r: Rng): void {
       return chShieldChallenge(b, r);
     case 'magnet':
       return chMagnetRun(b, r);
+    case 'hill':
+      return chHill(b, r);
+    case 'valley':
+      return chValley(b, r);
+    case 'mesa':
+      return chMesa(b, r);
+    case 'rolling':
+      return chRolling(b, r);
   }
 }
 

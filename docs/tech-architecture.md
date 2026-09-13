@@ -44,6 +44,33 @@ packages/shared
 
 客户端通过 `apps/client/src/platform.ts` 访问可选的平台能力，平台选择优先级为：官方 4399 HTML5小游戏 SDK（`platform-h5mini.ts`，仅在 iframe 嵌入环境自动接入）→ 宿主注入桥 `window.__DASHLINE_PLATFORM__`（测试用）→ 本地实现。本地直开时不加载 SDK、不发起平台请求。平台初始化、广告或统计失败必须降级，不能阻断核心游戏。
 
+## 赛道与地形
+
+赛道生成在 `packages/core/src/chunks.ts`。`Track.grounds` 的每个 `GroundSeg` 都带自己的顶面高度 `y`：
+
+```ts
+interface GroundSeg { x0: number; x1: number; y: number }
+```
+
+`y` 相对基准地面 `GROUND_Y = 460` 起伏，允许区间为 `[GROUND_Y - TERRAIN_UP_MAX, GROUND_Y + TERRAIN_DOWN_MAX]`
+（即抬升 ≤120px、下沉 ≤40px）。上限受相机约束——相机只做水平跟随（`camX`），抬得更高会让角色跑出视口顶部；
+下限受坑深判定约束——再深会让谷底接近坠落判定线。
+
+地形积木（`chHill` / `chValley` / `chMesa` / `chRolling`）通过 `Builder.rampTo(dx, targetY)` 改变地面高度，
+并且**结束前必须把地面收回 `GROUND_Y`**，这样其余 22 种积木可以继续假定"地面在基准高度"，不必逐个适配。
+`rampTo` 接收绝对目标高度而非相对落差：相对量会在多次调用之间累积，一旦某块忘记抵消就会把地面越推越高。
+
+坡道由阶梯拼成，单级高差 ≤`RAMP_STEP_PX = 10`，玩家靠 `GROUND_STEP_MAX = 12` 的贴地容差自动上下坡，
+因此没有斜坡碰撞体。`World` 的贴地、落地与支撑判定全部按 `g.y` 逐段计算：
+
+- `groundTopUnder(x, half)` 取脚下最近的地面段高度；
+- 贴地状态下若脚底与新高度差 ≤`GROUND_STEP_MAX` 则吸附（上/下坡），否则转入离地坠落（悬崖）；
+- `landingTopAt` 在落地时按各段自身高度判断穿越，多个候选取最高的一块。
+
+渲染侧对应使用 `WorldView.terrainTopAt(x)` 贴合地面高度（地面段、装饰、弹跳菇、加速带、刺梁分类），
+坑底暗色不再是"从 `GROUND_Y` 起的通栏矩形"，而是"全局底色从最低地面开始 + 每个坑单独补齐"，
+否则谷地上方会出现一条横贯屏幕的黑带。
+
 ## 复活
 
 复活入口与每日额度由 `apps/client/src/revive.ts` 的 `ReviveBank` 管理：每天 3 次免费复活，按 UTC 日期日切，存档 key 为 `dl_revives_v1`。激励广告复活只在平台能力可用时出现，每局最多一次，与免费次数互不影响。

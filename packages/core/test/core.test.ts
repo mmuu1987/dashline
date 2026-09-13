@@ -4,6 +4,10 @@ import {
   buildTrack,
   createWorld,
   createWorldWithTrack,
+  GROUND_STEP_MAX,
+  GROUND_Y,
+  TERRAIN_DOWN_MAX,
+  TERRAIN_UP_MAX,
   type SimEvent,
   type Track,
   type WorldSnapshot,
@@ -64,8 +68,8 @@ describe('复活检查点', () => {
     // 出生点前方 320px 就是深坑：复活保护（120 tick）还没结束就会掉下去。
     const track: Track = {
       grounds: [
-        { x0: -100, x1: 400 },
-        { x0: 700, x1: 1300 },
+        { x0: -100, x1: 400, y: GROUND_Y },
+        { x0: 700, x1: 1300, y: GROUND_Y },
       ],
       hazards: [],
       coins: [],
@@ -105,12 +109,13 @@ describe('确定性（架构地基）', () => {
   it('赛道满足基本不变量', () => {
     for (const s of [1n, 42n, 12345n, 987654321n]) {
       const t = buildTrack(s);
-      expect(t.finishX).toBeGreaterThanOrEqual(17000);
+      expect(t.finishX).toBeGreaterThanOrEqual(34000);
       expect(t.finishX).toBeLessThanOrEqual(t.length);
-      expect(t.coins.length).toBeGreaterThan(40);
+      expect(t.coins.length).toBeGreaterThan(90);
       expect(t.hazards.length).toBeGreaterThan(8);
-      // 地面第一段必须覆盖出生点
+      // 地面第一段必须覆盖出生点，且出生点所在段必须是基准高度
       expect(t.grounds[0]!.x0).toBeLessThanOrEqual(80);
+      expect(t.grounds[0]!.y).toBe(GROUND_Y);
     }
   });
 
@@ -226,5 +231,84 @@ describe('物理手感不变量', () => {
   it('无输入最终会死于障碍或坠坑（赛道确有挑战）', () => {
     const { snap } = runWorld(SEED, new Uint8Array(7200));
     expect(snap.alive && snap.finished).toBe(false);
+  });
+
+  it('地形起伏：高度受限、相邻台阶可走、且确实存在高低地面', () => {
+    let sawNonBase = 0;
+    for (const s of [1n, 42n, 12345n, 20260904n, 777n, 999n, 31337n, 5n]) {
+      const t = buildTrack(s);
+      const gs = [...t.grounds].sort((a, b) => a.x0 - b.x0);
+
+      // 出生点必须落在基准高度，否则开局就是"悬空/埋地"
+      expect(gs[0]!.y).toBe(GROUND_Y);
+
+      // 高度必须夹在允许区间内：太高会跑出视口，太低会接近坑底判定线
+      for (const g of gs) {
+        expect(g.y).toBeGreaterThanOrEqual(GROUND_Y - TERRAIN_UP_MAX);
+        expect(g.y).toBeLessThanOrEqual(GROUND_Y + TERRAIN_DOWN_MAX);
+      }
+
+      // 相邻且相连的地面段（即坡道台阶）高差不得超过贴地容差，
+      // 否则玩家走上去会被判成悬崖并坠落 —— 这是坡道能否通行的核心约束。
+      for (let i = 0; i + 1 < gs.length; i++) {
+        const a = gs[i]!;
+        const b = gs[i + 1]!;
+        if (b.x0 - a.x1 > 1) continue; // 中间是坑，不是台阶
+        expect(Math.abs(b.y - a.y)).toBeLessThanOrEqual(GROUND_STEP_MAX);
+      }
+
+      if (gs.some((g) => g.y !== GROUND_Y)) sawNonBase++;
+    }
+    // 每个种子都应该出现地形起伏，否则地形积木等于没生效
+    expect(sawNonBase).toBe(8);
+  });
+
+  it('坡道可以纯靠贴地容差走上去（无需跳跃）', () => {
+    // 取一段真实生成的连续地形，让玩家在"零输入"下走完：
+    // 只要台阶高差不超过 GROUND_STEP_MAX，就应该始终贴地且存活。
+    const t = buildTrack(12345n);
+    const gs = [...t.grounds].sort((a, b) => a.x0 - b.x0);
+    let run: typeof gs = [];
+    for (let i = 0; i < gs.length; i++) {
+      const g = gs[i]!;
+      if (run.length === 0 || g.x0 - run[run.length - 1]!.x1 <= 1) {
+        run.push(g);
+      } else if (run.length > 1) {
+        break; // 找到第一段带坡道的连续地形
+      } else {
+        run = [g];
+      }
+    }
+    expect(run.length).toBeGreaterThan(1);
+
+    const shift = -run[0]!.x0 - 60;
+    const grounds = run.map((g) => ({ x0: g.x0 + shift, x1: g.x1 + shift, y: g.y }));
+    const x1 = grounds[grounds.length - 1]!.x1;
+    const track: Track = {
+      grounds,
+      hazards: [],
+      coins: [],
+      plats: [],
+      pads: [],
+      boosts: [],
+      rings: [],
+      winds: [],
+      pendulums: [],
+      gates: [],
+      portals: [],
+      shields: [],
+      magnets: [],
+      finishX: x1 + 2000,
+      length: x1 + 2400,
+    };
+    const w = createWorldWithTrack(1n, track);
+    const ticks = Math.ceil((x1 - grounds[0]!.x0) / 6) + 120;
+    for (let i = 0; i < ticks && w.snapshot.alive && w.snapshot.x < x1 - 4; i++) {
+      w.step(0);
+      expect(w.snapshot.alive).toBe(true);
+    }
+    // 走完整段坡道且全程没死
+    expect(w.snapshot.alive).toBe(true);
+    expect(w.snapshot.x).toBeGreaterThanOrEqual(x1 - 4);
   });
 });
