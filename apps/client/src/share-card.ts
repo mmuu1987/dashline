@@ -70,8 +70,13 @@ export function renderShareCard(assets: GameAssets, d: ShareCardData): HTMLCanva
 
   // ---- 草顶地条（底部装饰）----
   const topSrc = srcOf(assets.groundTop);
-  for (let x = 0; x < W; x += 64) {
-    g.drawImage(topSrc, x, H - 148, 64, 64);
+  const topW = assets.groundTop.frame.width;
+  const topH = assets.groundTop.frame.height;
+  const topZoom = 4;
+  const dw = topW * topZoom;
+  const dh = topH * topZoom;
+  for (let x = 0; x < W; x += dw) {
+    g.drawImage(topSrc, assets.groundTop.frame.x, assets.groundTop.frame.y, topW, topH, x, H - dh - 84, dw, dh);
   }
 
   // ---- 标题与日期 ----

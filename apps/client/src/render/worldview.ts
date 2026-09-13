@@ -1,8 +1,15 @@
 import { Container, Graphics, Sprite, TilingSprite, type Texture } from 'pixi.js';
 import { GROUND_Y, SPIKE_W, isGateActive, moverOffsetY, pendulumBob, type Track } from '@dashline/core';
 import { splitmix32 } from '@dashline/shared';
-import { VIEW_H, VIEW_W } from './consts.js';
+import { ART_SCALE, VIEW_H, VIEW_W } from './consts.js';
 import type { GameAssets } from './textures.js';
+
+/**
+ * 平台厚度：受关卡设计约束（chunks.ts 里平台离地最低 24px、层间 42px），
+ * 所以平台不能按 16px 整格缩放，只能保持薄板观感；缩放倍率只统一地面/道具/宝石。
+ */
+const PLAT_H = 22;
+const CRUMBLE_H = 20;
 
 export class WorldView {
   readonly root = new Container();
@@ -48,7 +55,7 @@ export class WorldView {
 
   setTrack(track: Track): void {
     this.track = track;
-    this.root.removeChildren().forEach((c) => c.destroy());
+    this.root.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.coinSprites = [];
     this.padCaps = [];
     this.crumbleSprites = [];
@@ -73,9 +80,9 @@ export class WorldView {
     backdrop.rect(-400, GROUND_Y + 2, track.length + 800, VIEW_H - GROUND_Y + 80).fill(0x0c101c);
     this.root.addChild(backdrop);
 
-    // 地面段：草顶行 + 泥土填充
-    const GS = 2.5;
-    const TOP_H = 16 * GS;
+    // 地面段：草顶行 + 泥土填充（统一 ART_SCALE，草皮由 3 变体拼接）
+    const GS = ART_SCALE;
+    const TOP_H = GS * this.assets.groundTop.height;
     for (const seg of track.grounds) {
       const w = seg.x1 - seg.x0;
       if (w <= 0) continue;
@@ -99,19 +106,19 @@ export class WorldView {
     // 浮空平台 / 碎裂板 / 倒挂天花板跑道
     track.plats.forEach((p, idx) => {
       if (p.inverted) {
-        // 倒挂天花板跑道
+        // 倒挂天花板跑道：板身挂在判定面之上（玩家从下方踩）
         const pts = new TilingSprite({
           texture: this.assets.platformLong,
           width: p.w,
-          height: 22,
+          height: PLAT_H,
         });
-        pts.tileScale.set(22 / 16);
+        pts.tileScale.set(PLAT_H / 16);
         pts.scale.y = -1;
-        pts.position.set(p.x, p.y + 11);
+        pts.position.set(p.x, p.y);
         this.root.addChild(pts);
         const edge = new Graphics();
-        edge.roundRect(-2, 0, p.w + 4, 24, 6).stroke({ width: 2, color: 0x6366f1 });
-        edge.position.set(p.x, p.y - 12);
+        edge.roundRect(-2, 0, p.w + 4, PLAT_H + 2, 6).stroke({ width: 2, color: 0x6366f1 });
+        edge.position.set(p.x, p.y - PLAT_H - 2);
         this.root.addChild(edge);
         return;
       }
@@ -120,16 +127,16 @@ export class WorldView {
         const board = new TilingSprite({
           texture: this.assets.crate,
           width: p.w,
-          height: 20,
+          height: CRUMBLE_H,
         });
-        board.tileScale.set(20 / 16);
+        board.tileScale.set(CRUMBLE_H / 16);
         board.alpha = 0.96;
         g.addChild(board);
         const cracks = new Graphics();
         for (let cx = 14; cx < p.w; cx += 26) {
-          cracks.moveTo(cx, -12).lineTo(cx + 4, -2).lineTo(cx - 2, 8).stroke({ width: 1.5, color: 0x2c1d0e });
+          cracks.moveTo(cx, 0).lineTo(cx + 4, 10).lineTo(cx - 2, CRUMBLE_H).stroke({ width: 1.5, color: 0x2c1d0e });
         }
-        cracks.roundRect(-2, -12, p.w + 4, 24, 5).stroke({ width: 2, color: 0x2c1d0e });
+        cracks.roundRect(-2, 0, p.w + 4, CRUMBLE_H, 5).stroke({ width: 2, color: 0x2c1d0e });
         g.addChild(cracks);
         g.position.set(p.x, p.y);
         this.crumbleSprites[idx] = g;
@@ -140,14 +147,14 @@ export class WorldView {
       const pts = new TilingSprite({
         texture: this.assets.platformLong,
         width: p.w,
-        height: 22,
+        height: PLAT_H,
       });
-      pts.tileScale.set(22 / 16);
-      pts.position.set(p.x, p.y - 11);
+      pts.tileScale.set(PLAT_H / 16);
+      pts.position.set(p.x, p.y);
       this.root.addChild(pts);
       const edge = new Graphics();
-      edge.roundRect(-2, 0, p.w + 4, 24, 6).stroke({ width: 2, color: 0x3f2b16 });
-      edge.position.set(p.x, p.y - 12);
+      edge.roundRect(-2, 0, p.w + 4, PLAT_H + 2, 6).stroke({ width: 2, color: 0x3f2b16 });
+      edge.position.set(p.x, p.y - 2);
       this.root.addChild(edge);
     });
 
@@ -161,13 +168,13 @@ export class WorldView {
       const board = new TilingSprite({
         texture: this.assets.platformLong,
         width: p.w,
-        height: 22,
+        height: PLAT_H,
       });
-      board.tileScale.set(22 / 16);
-      board.position.set(0, -11);
+      board.tileScale.set(PLAT_H / 16);
+      board.position.set(0, 0);
       g.addChild(board);
       const rail = new Graphics();
-      rail.roundRect(-2, 0, p.w + 4, 24, 6).stroke({ width: 2, color: 0x4a5a78 });
+      rail.roundRect(-2, 0, p.w + 4, PLAT_H + 2, 6).stroke({ width: 2, color: 0x4a5a78 });
       for (const ax of [10, p.w - 10]) {
         rail.moveTo(ax - 5, -18).lineTo(ax, -24).lineTo(ax + 5, -18).stroke({ width: 2.5, color: 0x8fd3ff });
         rail.moveTo(ax - 5, 30).lineTo(ax, 36).lineTo(ax + 5, 30).stroke({ width: 2.5, color: 0x8fd3ff });
@@ -252,7 +259,7 @@ export class WorldView {
     for (const c of track.coins) {
       const s = new Sprite(this.assets.gemFrames[0]!);
       s.anchor.set(0.5);
-      s.scale.set(1.15 * (26 / 22));
+      s.scale.set(ART_SCALE);
       s.position.set(c.x, c.y);
       this.coinSprites.push(s);
       this.root.addChild(s);
@@ -420,33 +427,36 @@ export class WorldView {
     this.flagCloth = cloth;
     this.root.addChild(cloth);
 
-    // 地面装饰
+    // 地面装饰：tileset 的透明底草簇/高草/小灌木 + 少量石块与树丛
     const r = splitmix32(Number(track.finishX));
-    const tufts = new Graphics();
+    const bigProps: Texture[] = [this.assets.rock, this.assets.bush, this.assets.crate];
     for (const seg of track.grounds) {
-      const props: Array<[Texture, number]> = [
-        [this.assets.rock, 0.9],
-        [this.assets.bush, 1.15],
-        [this.assets.shrooms, 1],
-      ];
       const isPadZone = (x: number): boolean =>
         track.pads.some((p) => x > p.x - 30 && x < p.x + p.w + 30);
-      let x = seg.x0 + 40 + r() * 140;
+      const isBoostZone = (x: number): boolean =>
+        track.boosts.some((z) => x > z.x - 40 && x < z.x + z.w + 40);
+      let x = seg.x0 + 36 + r() * 90;
       while (x < seg.x1 - 36) {
-        const h = 7 + r() * 9;
-        tufts.moveTo(x, GROUND_Y).lineTo(x + 3.5, GROUND_Y - h).lineTo(x + 7, GROUND_Y).fill({ color: 0x8fce56, alpha: 0.85 });
-        if (!isPadZone(x) && r() < 0.55) {
-          const [tex, sc] = props[Math.floor(r() * props.length)]!;
-          const s = new Sprite(tex);
-          s.anchor.set(0.5, 1);
-          s.scale.set(sc * (0.85 + r() * 0.3));
-          s.position.set(x + 20 + r() * 30, GROUND_Y + 2);
-          this.root.addChild(s);
+        const free = !isPadZone(x) && !isBoostZone(x);
+        if (free) {
+          const decor = this.assets.groundDecor[Math.floor(r() * this.assets.groundDecor.length)]!;
+          const d = new Sprite(decor);
+          d.anchor.set(0.5, 1);
+          d.scale.set(ART_SCALE);
+          d.position.set(x, GROUND_Y + 3);
+          this.root.addChild(d);
+          // 偶发放置大件道具，避免小块装饰铺满整条跑道
+          if (r() < 0.3) {
+            const s = new Sprite(bigProps[Math.floor(r() * bigProps.length)]!);
+            s.anchor.set(0.5, 1);
+            s.scale.set(ART_SCALE);
+            s.position.set(x + 54 + r() * 40, GROUND_Y + 3);
+            this.root.addChild(s);
+          }
         }
-        x += 90 + r() * 150;
+        x += 130 + r() * 190;
       }
     }
-    this.root.addChild(tufts);
   }
 
   onCoin(index: number): void {

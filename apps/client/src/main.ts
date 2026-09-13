@@ -18,6 +18,7 @@ import { loadBestRecord, saveBestRecord, type BestRecord } from './best-record.j
 import { Hud } from './hud.js';
 import { InputBuffer } from './input.js';
 import { calculateStreak, getDayRecord, saveDayRecord } from './meta.js';
+import { AD_REVIVES_PER_RUN, ReviveBank } from './revive.js';
 import { GameView, VIEW_H, VIEW_W } from './render.js';
 import { THEMES } from './render/background.js';
 import { loadAssets } from './render/textures.js';
@@ -207,10 +208,14 @@ async function boot(): Promise<void> {
   let best: BestRecord | null = loadBestRecord(dateStr);
   let usedShieldInRun = false;
   let nearMissCountInRun = 0;
-  let revivedInRun = false;
+  let freeRevivesUsedInRun = 0;
+  let adRevivesUsedInRun = 0;
   let rewardBusy = false;
   let attemptCommitted = false;
   let attemptId = 0;
+
+  /** 每日免费复活账本（按 UTC 日期日切，与每日种子同一基准）。 */
+  const revives = new ReviveBank(dateStr);
 
   hud.setMode(platform.isAvailable() ? '4399 运营模式' : '纯单机模式');
   platform.track('game_ready');
@@ -229,7 +234,8 @@ async function boot(): Promise<void> {
     attempts++;
     usedShieldInRun = false;
     nearMissCountInRun = 0;
-    revivedInRun = false;
+    freeRevivesUsedInRun = 0;
+    adRevivesUsedInRun = 0;
     attemptCommitted = false;
     phase = 'run';
     platform.track('run_start', { attempt: attempts });
@@ -335,8 +341,43 @@ async function boot(): Promise<void> {
     hud.setMeta(attempts, best ? fmtBest(best) : '--', streak);
   }
 
+  /**
+   * 复活成功后的公共状态恢复：从最近的安全检查点继续本局，尝试次数不变。
+   * 赛道对象未变，因此只回灌动态状态，不重建整棵赛道精灵树。
+   */
+  function applyRevive(): void {
+    world.reviveFrom(reviveCheckpoint);
+    attemptCommitted = false; // 本局继续，最终成绩以复活后跑到哪里为准
+    phase = 'run';
+    deadUntil = 0;
+    view.restoreDynamicState(world.snapshot);
+    view.resetCamera();
+    view.resetAttemptFx(world.snapshot.x, world.snapshot.y);
+    input.resetHeld();
+    hud.hideResult();
+    hud.showPause(false);
+    pauseBtn.textContent = '⏸';
+    last = performance.now();
+    acc = 0;
+  }
+
+  /** 免费复活：消耗每日额度，单机模式下也始终可用。 */
+  function tryFreeRevive(): void {
+    if (rewardBusy || phase === 'run' || world.snapshot.finished) return;
+    if (!revives.consumeFree()) {
+      hud.toast('今日免费复活次数已用完');
+      showResultPanel();
+      return;
+    }
+    freeRevivesUsedInRun++;
+    applyRevive();
+    hud.toast(`💖 免费复活成功！今日还剩 ${revives.remainingFree()} 次`);
+    platform.track('free_revive_success', { usedInRun: freeRevivesUsedInRun });
+  }
+
   async function tryRewardedRevive(): Promise<void> {
-    if (rewardBusy || revivedInRun || world.snapshot.finished) return;
+    if (rewardBusy || world.snapshot.finished) return;
+    if (adRevivesUsedInRun >= AD_REVIVES_PER_RUN) return;
     const rewardAttemptId = attemptId;
     const rewardWorld = world;
     const rewardCheckpoint = reviveCheckpoint;
@@ -359,21 +400,10 @@ async function boot(): Promise<void> {
       // 玩家可在广告等待期间直接重开；旧回调绝不能修改新一局。
       if (attemptId !== rewardAttemptId || world !== rewardWorld) return;
       if (result === 'completed') {
-        rewardWorld.reviveFrom(rewardCheckpoint);
-        revivedInRun = true;
-        attemptCommitted = false;
-        phase = 'run';
-        deadUntil = 0;
-        view.setTrack(world.track);
-        view.restoreDynamicState(world.snapshot);
-        view.resetCamera();
-        view.resetAttemptFx(world.snapshot.x, world.snapshot.y);
-        hud.hideResult();
-        hud.showPause(false);
+        adRevivesUsedInRun++;
+        applyRevive();
         platform.track('reward_ad_complete');
         platform.track('revive_success');
-        last = performance.now();
-        acc = 0;
         return;
       }
       platform.track(result === 'cancelled' ? 'reward_ad_cancel' : 'reward_ad_fail', { result });
@@ -391,6 +421,8 @@ async function boot(): Promise<void> {
 
   function showResultPanel(): void {
     const s = world.snapshot;
+    const canRevive = !s.finished;
+    const freeLeft = revives.remainingFree();
     hud.showResult({
       finished: s.finished,
       timeMs: s.timeMs,
@@ -401,7 +433,11 @@ async function boot(): Promise<void> {
       onRetry: () => resetAttempt(),
       onCard: () => void makeShareCard(),
       onTalents: () => openTalents(),
-      onRewardedRevive: !s.finished && !revivedInRun && platform.isAvailable()
+      onFreeRevive: canRevive && freeLeft > 0 ? () => tryFreeRevive() : undefined,
+      freeRevivesLeft: freeLeft,
+      onRewardedRevive: canRevive
+        && adRevivesUsedInRun < AD_REVIVES_PER_RUN
+        && platform.isAvailable()
         ? () => void tryRewardedRevive()
         : undefined,
       rewardBusy,

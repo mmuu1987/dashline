@@ -12,7 +12,12 @@ export interface ResultData {
   onRetry: () => void;
   onCard: () => void;
   onTalents?: () => void;
+  /** 广告复活入口；同一局最多出现一次。 */
   onRewardedRevive?: () => void;
+  /** 免费复活入口（每日限额）；额度为 0 时不传。 */
+  onFreeRevive?: () => void;
+  /** 今日剩余免费复活次数，仅用于文案。 */
+  freeRevivesLeft?: number;
   rewardBusy?: boolean;
 }
 
@@ -77,17 +82,33 @@ export class Hud {
     const title = d.finished ? '🏁 完赛！' : '💥 撞毁了…';
     const time = d.finished ? `⏱ 用时 <b>${(d.timeMs / 1000).toFixed(2)}s</b>` : `📏 距离 <b>${d.distanceM}m</b>`;
     const streakTag = d.streak && d.streak > 0 ? ` · 🔥 连续完赛 ${d.streak}天` : '';
+    const freeLeft = d.freeRevivesLeft ?? 0;
+    const busy = d.rewardBusy ? 'disabled' : '';
+    const freeBtn = d.onFreeRevive
+      ? `<button id="btn-free-revive" class="race-btn" ${busy}>💖 免费复活（剩 ${freeLeft}）</button>`
+      : '';
+    const adBtn = d.onRewardedRevive
+      ? `<button id="btn-revive" class="race-btn" ${busy}>${d.rewardBusy ? '广告准备中…' : '▶ 看广告复活'}</button>`
+      : '';
+    // 撞毁但两条复活入口都不可用时，明确告知原因，避免玩家以为按钮丢失。
+    const noReviveHint = !d.finished && !d.onFreeRevive && !d.onRewardedRevive
+      ? `<div class="row revive-hint">本轮暂无可用复活机会</div>`
+      : '';
     this.panel.innerHTML = `
       <h2>${title}</h2>
-      <div class="big">${(d.finished ? d.timeMs / 1000 : d.score).toLocaleString?.() ?? ''}${d.finished ? ' s' : ' 分'}</div>
+      <div class="big">${d.finished ? (d.timeMs / 1000).toFixed(2) : d.score}${d.finished ? ' s' : ' 分'}</div>
       <div class="row">${time} · 🪙 ${d.coins}${streakTag}</div>
+      ${noReviveHint}
       <div class="btns">
-        ${d.onRewardedRevive ? `<button id="btn-revive" class="race-btn" ${d.rewardBusy ? 'disabled' : ''}>${d.rewardBusy ? '广告准备中…' : '▶ 看广告复活'}</button>` : ''}
+        ${freeBtn}
+        ${adBtn}
         <button id="btn-retry">再跑一次</button>
         <button id="btn-talents-res" class="race-btn">⚡ 天赋强化</button>
         <button id="btn-card" class="secondary-btn">📸 战报</button>
       </div>`;
     document.getElementById('btn-retry')!.onclick = d.onRetry;
+    const freeReviveBtn = document.getElementById('btn-free-revive') as HTMLButtonElement | null;
+    if (freeReviveBtn && d.onFreeRevive && !d.rewardBusy) freeReviveBtn.onclick = d.onFreeRevive;
     const reviveBtn = document.getElementById('btn-revive') as HTMLButtonElement | null;
     if (reviveBtn && d.onRewardedRevive && !d.rewardBusy) reviveBtn.onclick = d.onRewardedRevive;
     if (d.onTalents && document.getElementById('btn-talents-res')) {

@@ -7,11 +7,16 @@
  * 5. 双层森林纵深视差（远景柔光雾林 / 近景原色葱郁林冠，保留全部树叶手绘细节）
  * 6. 8 套高纯度、高对比度、通透清爽的现代独立游戏配色系统（绝无沉浊土黄与黑斑）
  */
-import { Container, FillGradient, Graphics, Sprite, TilingSprite } from 'pixi.js';
+import { Container, FillGradient, Graphics, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { GROUND_Y } from '@dashline/core';
 import { splitmix32 } from '@dashline/shared';
 import { VIEW_H, VIEW_W } from './consts.js';
 import type { GameAssets } from './textures.js';
+
+/** 树冠条带高度（forest.png 自 y=0 起约 100px 为树冠，往下一律纯色暗块）。 */
+const FOREST_CANOPY_H = 112;
+/** 树冠整数倍放大：像素画只允许整数倍，否则边界会出现 2/3 像素的锯齿抖动。 */
+const FOREST_SCALE = 2;
 
 export interface ThemePalette {
   name: string;
@@ -264,22 +269,27 @@ export class Background {
     this.root.addChild(this.mountains);
 
     // 6. 远景森林（柔和雾化）与近景森林（原色葱郁树冠）
-    // scale 适配让树冠自然展现在中景地平线
-    const fHeight = 220;
-    const scale = fHeight / assets.forestLayer.height;
+    // forest.png 上半部是透明底的树冠剪影，下半部是一整块纯色暗块。
+    // 直接整张按 0.6 倍缩放会把像素画糊掉、并在地平线上糊出一条暗墙，
+    // 所以只取树冠条带并做整数倍放大。
+    const canopy = new Texture({
+      source: assets.forestLayer.source,
+      frame: new Rectangle(0, 0, assets.forestLayer.width, FOREST_CANOPY_H),
+    });
     const mkForest = (posY: number): TilingSprite => {
       const ts = new TilingSprite({
-        texture: assets.forestLayer,
+        texture: canopy,
         width: VIEW_W + 400,
-        height: fHeight + 40,
+        height: FOREST_CANOPY_H * FOREST_SCALE,
       });
-      ts.tileScale.set(scale);
+      ts.tileScale.set(FOREST_SCALE);
       ts.position.set(0, posY);
       return ts;
     };
 
-    this.far = mkForest(GROUND_Y - 210);
-    this.near = mkForest(GROUND_Y - 185);
+    // 底边压在判定面之下（由地面与坑底底色遮住），树冠自然长在地平线上
+    this.far = mkForest(GROUND_Y + 8 - FOREST_CANOPY_H * FOREST_SCALE);
+    this.near = mkForest(GROUND_Y + 8 - FOREST_CANOPY_H * FOREST_SCALE + 38);
     this.root.addChild(this.far, this.near);
 
     this.applyTheme(themeId);

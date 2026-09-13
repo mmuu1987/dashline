@@ -636,9 +636,15 @@ export class World {
   }
 
   private die(cause: 'spike' | 'pit' | 'ball' | 'laser'): void {
+    // 坠坑不受任何无敌保护：否则复活保护期内掉进坑会一直坠落，2 秒后才判死。
+    if (cause === 'pit') {
+      this._alive = false;
+      this.evq.push({ type: 'crash', cause });
+      return;
+    }
     if (this._reviveInvulTicks > 0) return; // 复活后的短暂无敌
     if (this._shieldInvulTicks > 0) return; // 护盾碎裂后短暂无敌
-    if (this._hasShield && cause !== 'pit') {
+    if (this._hasShield) {
       // 护盾抵扣致死伤害！
       this._hasShield = false;
       this._shieldInvulTicks = 22; // ~0.36s 保护无敌

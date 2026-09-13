@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { makeInput, splitmix32 } from '@dashline/shared';
-import { buildTrack, createWorld, type WorldSnapshot } from '../src/index.js';
+import {
+  buildTrack,
+  createWorld,
+  createWorldWithTrack,
+  type SimEvent,
+  type Track,
+  type WorldSnapshot,
+} from '../src/index.js';
 
 const SEED = 12345n;
 
@@ -51,6 +58,40 @@ describe('复活检查点', () => {
     const w = createWorld(SEED);
     const other = createWorld(SEED + 1n);
     expect(() => w.reviveFrom(other)).toThrow('复活检查点与当前赛道不匹配');
+  });
+
+  it('复活保护期内坠坑仍然立即判死', () => {
+    // 出生点前方 320px 就是深坑：复活保护（120 tick）还没结束就会掉下去。
+    const track: Track = {
+      grounds: [
+        { x0: -100, x1: 400 },
+        { x0: 700, x1: 1300 },
+      ],
+      hazards: [],
+      coins: [],
+      plats: [],
+      pads: [],
+      boosts: [],
+      rings: [],
+      winds: [],
+      pendulums: [],
+      gates: [],
+      portals: [],
+      shields: [],
+      magnets: [],
+      finishX: 1200,
+      length: 1300,
+    };
+    const w = createWorldWithTrack(1n, track);
+    w.reviveFrom(w.clone()); // 获得 2 秒复活保护
+    const events: SimEvent[] = [];
+    for (let i = 0; i < 200 && w.snapshot.alive; i++) {
+      w.step(0);
+      for (const e of w.takeEvents()) events.push(e);
+    }
+    expect(w.snapshot.alive).toBe(false);
+    expect(w.snapshot.tick).toBeLessThan(120); // 保护期结束前就该判死，不能被无敌吞掉
+    expect(events.find((e) => e.type === 'crash')).toMatchObject({ cause: 'pit' });
   });
 });
 

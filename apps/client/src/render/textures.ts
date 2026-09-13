@@ -2,14 +2,11 @@
  * 纹理中心：下载的 CC0 素材（Kenney / Phaser examples）+ canvas 程序化生成的质感贴图。
  * 全部在 boot 时一次性异步加载。
  */
-import { Assets, Texture } from 'pixi.js';
+import { Assets, Rectangle, Texture } from 'pixi.js';
 import { VIEW_H, VIEW_W } from './consts.js';
 
 export interface GameAssets {
-  ground: Texture;
-  plank: Texture;
-  coin: Texture;
-  cloud: Texture;
+  /** 粒子用小贴图（Kenney，线性采样更柔和） */
   sparkle: Texture;
   goldDot: Texture;
   whiteDot: Texture;
@@ -28,14 +25,16 @@ export interface GameAssets {
   skyTopColor: number;
   skyBottomColor: number;
   forestLayer: Texture;
+  /** 草顶条：由 tileset 三种草皮变体横向拼接而成，避免 16px 硬重复 */
   groundTop: Texture;
   groundFill: Texture;
   gemFrames: Texture[];
   bush: Texture;
   rock: Texture;
-  shrooms: Texture;
   platformLong: Texture;
   crate: Texture;
+  /** 地面装饰（草簇 / 高草 / 小灌木），取自 tileset 的透明底格子 */
+  groundDecor: Texture[];
 }
 
 function canvasTexture(w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void): Texture {
@@ -286,8 +285,63 @@ function makeDistantMountains(): Texture {
   });
 }
 
+/** 像素素材必须用最近邻采样，否则线性插值会把像素质感糊掉。 */
+function useNearest(tex: Texture): Texture {
+  tex.source.scaleMode = 'nearest';
+  return tex;
+}
+
+/** 取 tileset 的单个 16px 格子作为独立纹理（共享同一张图集）。 */
+function tileFrame(tileset: Texture, col: number, row: number): Texture {
+  const size = 16;
+  return new Texture({
+    source: tileset.source,
+    frame: new Rectangle(col * size, row * size, size, size),
+  });
+}
+
+/** 把若干等宽格子在 canvas 上横向拼成一条，供 TilingSprite 平铺以获得变体。 */
+function composeStrip(parts: readonly Texture[]): Texture {
+  const first = parts[0]!;
+  const w = first.frame.width;
+  const h = first.frame.height;
+  const cv = document.createElement('canvas');
+  cv.width = w * parts.length;
+  cv.height = h;
+  const ctx = cv.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  parts.forEach((p, i) => {
+    const src = p.source.resource as CanvasImageSource;
+    ctx.drawImage(src, p.frame.x, p.frame.y, w, h, i * w, 0, w, h);
+  });
+  return useNearest(Texture.from(cv));
+}
+
 /** 资源 URL：拼上构建 base（dev='/'，Pages 子路径='./'），兼容任意部署目录 */
 const assetUrl = (p: string): string => import.meta.env.BASE_URL + p.replace(/^\//, '');
+
+/** 参与最近邻采样的像素素材（Sunny Land 手绘像素画）。 */
+const PIXEL_ART = [
+  'assets/art/forest.png',
+  'assets/art/gem-1.png',
+  'assets/art/gem-2.png',
+  'assets/art/gem-3.png',
+  'assets/art/gem-4.png',
+  'assets/art/bush.png',
+  'assets/art/rock.png',
+  'assets/art/platform_long.png',
+  'assets/art/crate.png',
+  'assets/art/tileset.png',
+] as const;
+
+/** 只加载渲染真正用到的资源；粒子贴图 4 张 + 像素素材。 */
+const ASSET_URLS = [
+  'assets/sparkle1.png',
+  'assets/gold.png',
+  'assets/white.png',
+  'assets/p-red.png',
+  ...PIXEL_ART,
+] as const;
 
 /** 加载图片位图，并采样顶部/底部主色（供全屏天空渐变） */
 async function loadBitmap(url: string): Promise<{ bmp: ImageBitmap; top: number; bottom: number }> {
@@ -307,38 +361,15 @@ async function loadBitmap(url: string): Promise<{ bmp: ImageBitmap; top: number;
 export async function loadAssets(
   onProgress?: (done: number, total: number) => void,
 ): Promise<GameAssets> {
-  const urls = [
-    'assets/ground.png',
-    'assets/plank.png',
-    'assets/coin.png',
-    'assets/cloud.png',
-    'assets/sparkle1.png',
-    'assets/gold.png',
-    'assets/white.png',
-    'assets/p-red.png',
-    // ---- Sunny Land（ansimuz）----
-    'assets/art/sky.png',
-    'assets/art/forest.png',
-    'assets/art/ground_top.png',
-    'assets/art/ground_fill.png',
-    'assets/art/gem-1.png',
-    'assets/art/gem-2.png',
-    'assets/art/gem-3.png',
-    'assets/art/gem-4.png',
-    'assets/art/bush.png',
-    'assets/art/rock.png',
-    'assets/art/shrooms.png',
-    'assets/art/platform_long.png',
-    'assets/art/crate.png',
-  ] as const;
   // 进度总量包含天空位图的二次读取，保证 100% 对应全部资源就绪
-  const total = urls.length + 1;
+  const total = ASSET_URLS.length + 1;
   let done = 0;
-  let loaded: unknown[];
+  const loaded = new Map<string, Texture>();
   try {
-    loaded = await Promise.all(
-      urls.map((u) =>
-        Assets.load(assetUrl(u)).then((tex) => {
+    await Promise.all(
+      ASSET_URLS.map((u) =>
+        Assets.load(assetUrl(u)).then((tex: Texture) => {
+          loaded.set(u, tex);
           done += 1;
           onProgress?.(done, total);
           return tex;
@@ -348,23 +379,38 @@ export async function loadAssets(
   } catch (error) {
     throw new Error('游戏资源加载失败，请检查网络或刷新页面重试', { cause: error });
   }
-  let skyBmp: { bmp: ImageBitmap; top: number; bottom: number };
+  const tex = (u: (typeof ASSET_URLS)[number]): Texture => loaded.get(u)!;
+
+  // 像素画一律最近邻采样
+  for (const u of PIXEL_ART) useNearest(tex(u));
+
+  // 天空主色采样：只需要颜色，位图用完即释放
+  let skyTopColor = 0x1976d2;
+  let skyBottomColor = 0xe3f2fd;
   try {
-    skyBmp = await loadBitmap('assets/art/sky.png');
+    const skyBmp = await loadBitmap('assets/art/sky.png');
+    skyTopColor = skyBmp.top;
+    skyBottomColor = skyBmp.bottom;
+    skyBmp.bmp.close();
   } catch (error) {
     throw new Error('天空资源读取失败，请刷新页面重试', { cause: error });
   }
   done += 1;
   onProgress?.(done, total);
+
+  const tileset = tex('assets/art/tileset.png');
+  const gemFrames = [
+    tex('assets/art/gem-1.png'),
+    tex('assets/art/gem-2.png'),
+    tex('assets/art/gem-3.png'),
+    tex('assets/art/gem-4.png'),
+  ];
+
   return {
-    ground: loaded[0] as Texture,
-    plank: loaded[1] as Texture,
-    coin: loaded[2] as Texture,
-    cloud: loaded[3] as Texture,
-    sparkle: loaded[4] as Texture,
-    goldDot: loaded[5] as Texture,
-    whiteDot: loaded[6] as Texture,
-    redTex: loaded[7] as Texture,
+    sparkle: tex('assets/sparkle1.png'),
+    goldDot: tex('assets/gold.png'),
+    whiteDot: tex('assets/white.png'),
+    redTex: tex('assets/p-red.png'),
     sky: makeSky(),
     vignette: makeVignette(),
     ball: makeBall(),
@@ -374,16 +420,31 @@ export async function loadAssets(
     confetti: makeConfetti(),
     fluffyCloud: makeFluffyCloud(),
     mountains: makeDistantMountains(),
-    skyTopColor: skyBmp.top,
-    skyBottomColor: skyBmp.bottom,
-    forestLayer: loaded[9] as Texture,
-    groundTop: loaded[10] as Texture,
-    groundFill: loaded[11] as Texture,
-    gemFrames: [loaded[12], loaded[13], loaded[14], loaded[15]] as Texture[],
-    bush: loaded[16] as Texture,
-    rock: loaded[17] as Texture,
-    shrooms: loaded[18] as Texture,
-    platformLong: loaded[19] as Texture,
-    crate: loaded[20] as Texture,
+    skyTopColor,
+    skyBottomColor,
+    forestLayer: tex('assets/art/forest.png'),
+    // tileset 第一行有三块草皮变体，拼成 48×16 一条再平铺，避免同 16px 图案硬重复
+    groundTop: composeStrip([
+      tileFrame(tileset, 1, 1),
+      tileFrame(tileset, 3, 1),
+      tileFrame(tileset, 5, 1),
+    ]),
+    // 泥土填充同理：第三行三块无草皮的土块变体
+    groundFill: composeStrip([
+      tileFrame(tileset, 1, 3),
+      tileFrame(tileset, 5, 3),
+      tileFrame(tileset, 7, 3),
+    ]),
+    gemFrames,
+    bush: tex('assets/art/bush.png'),
+    rock: tex('assets/art/rock.png'),
+    platformLong: tex('assets/art/platform_long.png'),
+    crate: tex('assets/art/crate.png'),
+    groundDecor: [
+      tileFrame(tileset, 1, 7), // 圆草簇
+      tileFrame(tileset, 3, 7), // 高草
+      tileFrame(tileset, 9, 7), // 小灌木
+      tileFrame(tileset, 11, 7), // 小灌木（变体）
+    ],
   };
 }

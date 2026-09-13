@@ -247,6 +247,46 @@ async function runHumanTest(): Promise<void> {
     console.log('✓ 官方 h5api 场景：自动检测、进度上报、激励复活全部通过');
     await sdkContext.close();
 
+    // ---- 场景 C：纯单机模式（宿主没有平台桥）也必须能复活 ----
+    console.log('[纯单机场景] 正在验证本地模式下的免费复活...');
+    const localContext = await browser.newContext({
+      viewport: { width: 960, height: 540 },
+      deviceScaleFactor: 1,
+    });
+    const localErrors: string[] = [];
+    const localPage = await localContext.newPage();
+    localPage.on('pageerror', (error) => localErrors.push(`pageerror: ${error.message}`));
+    await localPage.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await localPage.locator('html[data-dashline-ready="true"]').waitFor({ timeout: 15_000 });
+
+    const localModeText = await localPage.locator('#hud-mode').innerText();
+    assert(localModeText.includes('单机'), `本地直开未进入纯单机模式：${localModeText}`);
+
+    await localPage.locator('#result.show').waitFor({ timeout: 20_000 });
+    assert(
+      (await localPage.locator('#btn-revive').count()) === 0,
+      '纯单机模式不应出现广告复活入口',
+    );
+    await requireVisible(localPage, '#btn-free-revive', '免费复活按钮');
+    const firstReviveLabel = await localPage.locator('#btn-free-revive').innerText();
+    assert(firstReviveLabel.includes('3'), `首次结算应显示剩余 3 次免费复活：${firstReviveLabel}`);
+
+    await localPage.locator('#btn-free-revive').click();
+    await localPage.locator('#result').waitFor({ state: 'hidden', timeout: 8_000 });
+    assert(
+      (await localPage.locator('#hud-meta').innerText()).includes('尝试 #1'),
+      '免费复活不应增加尝试次数',
+    );
+
+    // 再次撞毁：免费次数应减少到 2
+    await localPage.locator('#result.show').waitFor({ timeout: 20_000 });
+    const secondReviveLabel = await localPage.locator('#btn-free-revive').innerText();
+    assert(secondReviveLabel.includes('2'), `第二次结算应显示剩余 2 次：${secondReviveLabel}`);
+    await localPage.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_09_local_revive.png') });
+    assert(localErrors.length === 0, `纯单机场景浏览器异常：\n${localErrors.join('\n')}`);
+    console.log('✓ 纯单机场景：免费复活入口、额度扣减、同局续跑通过');
+    await localContext.close();
+
     assert(browserErrors.length === 0, `浏览器异常：\n${browserErrors.join('\n')}`);
     assert(sdkErrors.length === 0, `官方 SDK 场景浏览器异常：\n${sdkErrors.join('\n')}`);
     assert(requestFailures.length === 0, `资源请求失败：\n${requestFailures.join('\n')}`);
