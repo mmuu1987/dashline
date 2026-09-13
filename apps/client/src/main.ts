@@ -19,7 +19,7 @@ import { loadBestRecord, saveBestRecord, type BestRecord } from './best-record.j
 import { Hud } from './hud.js';
 import { InputBuffer } from './input.js';
 import { calculateStreak, getDayRecord, saveDayRecord } from './meta.js';
-import { AD_REVIVES_PER_RUN, ReviveBank } from './revive.js';
+import { AD_REVIVES_PER_RUN, REVIVE_BACKOFF_PX, ReviveBank, ReviveCheckpointTracker } from './revive.js';
 import { GameView, VIEW_H, VIEW_W } from './render.js';
 import { THEMES } from './render/background.js';
 import { loadAssets } from './render/textures.js';
@@ -205,7 +205,6 @@ async function boot(): Promise<void> {
   let attempts = getDayRecord(dateStr)?.attempts ?? 0;
   let deadUntil = 0;
   let world: World = createWorld(seed, talents.getPerksConfig());
-  let reviveCheckpoint: World = world.clone();
   let best: BestRecord | null = loadBestRecord(dateStr);
   let usedShieldInRun = false;
   let nearMissCountInRun = 0;
@@ -217,6 +216,9 @@ async function boot(): Promise<void> {
 
   /** 每日免费复活账本（按 UTC 日期日切，与每日种子同一基准）。 */
   const revives = new ReviveBank(dateStr);
+
+  /** 复活检查点：滞后取样，保证复活点落在死亡点身后（见 revive.ts）。 */
+  const checkpoints = new ReviveCheckpointTracker(REVIVE_BACKOFF_PX, world.clone());
 
   /** 管理员通道：本轮构建是否允许无限复活（见 admin.ts 的安全说明）。 */
   const admin = new AdminChannel(window.location.search);
@@ -234,7 +236,7 @@ async function boot(): Promise<void> {
   function resetAttempt(): void {
     attemptId++;
     world = createWorld(seed, talents.getPerksConfig());
-    reviveCheckpoint = world.clone();
+    checkpoints.reset(world.clone());
     view.setTrack(world.track);
     view.resetCamera();
     view.resetAttemptFx(START_X, START_Y);
@@ -353,7 +355,7 @@ async function boot(): Promise<void> {
    * 赛道对象未变，因此只回灌动态状态，不重建整棵赛道精灵树。
    */
   function applyRevive(): void {
-    world.reviveFrom(reviveCheckpoint);
+    world.reviveFrom(checkpoints.checkpoint());
     attemptCommitted = false; // 本局继续，最终成绩以复活后跑到哪里为准
     phase = 'run';
     deadUntil = 0;
@@ -391,7 +393,7 @@ async function boot(): Promise<void> {
     if (adRevivesUsedInRun >= AD_REVIVES_PER_RUN) return;
     const rewardAttemptId = attemptId;
     const rewardWorld = world;
-    const rewardCheckpoint = reviveCheckpoint;
+    const rewardCheckpoint = checkpoints.checkpoint();
     rewardBusy = true;
     hud.showResult({
       finished: false,
@@ -639,15 +641,10 @@ async function boot(): Promise<void> {
     const inp = input.poll();
     world.step(inp);
     handleEvents(world.takeEvents());
-    // 只在安全落地且已前进一段距离时保存检查点，避免复活到坑内或危险空中状态。
-    const snap = world.snapshot;
-    if (
-      phase === 'run' &&
-      snap.alive &&
-      snap.grounded &&
-      snap.x - reviveCheckpoint.snapshot.x >= 120
-    ) {
-      reviveCheckpoint = world.clone();
+    // 只在安全落地时取样，且滞后 REVIVE_BACKOFF_PX 才提交：
+    // 复活点因此永远落在死亡点身后一段距离，而不是贴着坑口重生。
+    if (phase === 'run') {
+      checkpoints.observe(world.snapshot, () => world.clone());
     }
   }
 

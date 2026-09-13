@@ -65,6 +65,21 @@ async function requireVisible(page: Page, selector: string, label: string): Prom
   assert(await locator.isVisible(), `${label}未显示`);
 }
 
+/** 从 HUD 读出当前距离（米）；core 里 distanceM = floor(x / 25)。 */
+async function readDistanceM(page: Page): Promise<number> {
+  const text = await page.locator('#hud-stats').innerText();
+  const matched = /(\d+)m/.exec(text);
+  assert(matched, `HUD 中读不到距离：${text}`);
+  return Number(matched[1]);
+}
+
+/** 等两帧，避免读到上一帧的旧 HUD（复活后立刻读会拿到死亡时的数值）。 */
+async function nextFrames(page: Page): Promise<void> {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))),
+  );
+}
+
 async function runHumanTest(): Promise<void> {
   console.log('=== 启动真人式浏览器自动化交互测试 ===\n');
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -271,8 +286,16 @@ async function runHumanTest(): Promise<void> {
     const firstReviveLabel = await localPage.locator('#btn-free-revive').innerText();
     assert(firstReviveLabel.includes('3'), `首次结算应显示剩余 3 次免费复活：${firstReviveLabel}`);
 
+    // 复活点必须回退到死亡点身后：否则玩家会在坑口原地重生，复活即秒死
+    const deadDistanceM = await readDistanceM(localPage);
     await localPage.locator('#btn-free-revive').click();
     await localPage.locator('#result').waitFor({ state: 'hidden', timeout: 8_000 });
+    await nextFrames(localPage);
+    const revivedDistanceM = await readDistanceM(localPage);
+    assert(
+      deadDistanceM - revivedDistanceM >= 10,
+      `复活点未回退到死亡点身后：死亡 ${deadDistanceM}m → 复活 ${revivedDistanceM}m`,
+    );
     assert(
       (await localPage.locator('#hud-meta').innerText()).includes('尝试 #1'),
       '免费复活不应增加尝试次数',

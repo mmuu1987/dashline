@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { FREE_REVIVES_PER_DAY, ReviveBank } from '../src/revive.js';
+import { createWorld, type World } from '@dashline/core';
+import {
+  FREE_REVIVES_PER_DAY,
+  REVIVE_BACKOFF_PX,
+  ReviveBank,
+  ReviveCheckpointTracker,
+  type GroundedSample,
+} from '../src/revive.js';
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>();
@@ -74,5 +81,65 @@ describe('每日免费复活账本', () => {
 
     localStorage.setItem('dl_revives_v1', 'null');
     expect(new ReviveBank(DAY).remainingFree()).toBe(FREE_REVIVES_PER_DAY);
+  });
+});
+
+describe('复活检查点滞后取样', () => {
+  const groundedAt = (x: number): GroundedSample => ({ alive: true, grounded: true, x });
+  const spawn = (): World => createWorld(1n);
+
+  it('推进满回溯距离才提交，且提交的是更早取样到的位置', () => {
+    const tracker = new ReviveCheckpointTracker(REVIVE_BACKOFF_PX, spawn());
+    const atSpawn = tracker.checkpoint();
+    const sampled = spawn();
+
+    tracker.observe(groundedAt(1000), () => sampled);
+    expect(tracker.checkpoint()).toBe(atSpawn); // 取样≠提交
+
+    tracker.observe(groundedAt(1000 + REVIVE_BACKOFF_PX - 1), () => sampled);
+    expect(tracker.checkpoint()).toBe(atSpawn);
+
+    tracker.observe(groundedAt(1000 + REVIVE_BACKOFF_PX), () => sampled);
+    expect(tracker.checkpoint()).toBe(sampled); // 提交 1000 处取到的状态，复活点在死亡点身后
+  });
+
+  it('空中与死亡状态一律不取样', () => {
+    const tracker = new ReviveCheckpointTracker(REVIVE_BACKOFF_PX, spawn());
+    let clones = 0;
+    const count = (): World => {
+      clones++;
+      return spawn();
+    };
+    tracker.observe({ alive: true, grounded: false, x: 1000 }, count);
+    tracker.observe({ alive: false, grounded: true, x: 1100 }, count);
+    tracker.observe({ alive: false, grounded: false, x: 1200 }, count);
+    expect(clones).toBe(0);
+  });
+
+  it('只在取样时克隆，不是每 tick 克隆', () => {
+    const tracker = new ReviveCheckpointTracker(REVIVE_BACKOFF_PX, spawn());
+    const shared = spawn();
+    let clones = 0;
+    for (let i = 0; i < 120; i++) {
+      tracker.observe(groundedAt(1000 + i * 10), () => {
+        clones++;
+        return shared;
+      });
+    }
+    expect(clones).toBeGreaterThan(0);
+    expect(clones).toBeLessThan(10); // 120 tick 内只取样约 5 次
+  });
+
+  it('reset 回到出生点并丢弃未提交的候选', () => {
+    const tracker = new ReviveCheckpointTracker(REVIVE_BACKOFF_PX, spawn());
+    tracker.observe(groundedAt(1000), () => spawn());
+
+    const freshSpawn = spawn();
+    tracker.reset(freshSpawn);
+    expect(tracker.checkpoint()).toBe(freshSpawn);
+
+    // 旧候选已丢弃：再推进距离也不会把重开前的状态提交上来
+    tracker.observe(groundedAt(2000), () => spawn());
+    expect(tracker.checkpoint()).toBe(freshSpawn);
   });
 });
