@@ -24,47 +24,12 @@ export interface SkinDef {
   trailType: 'streamer' | 'petals' | 'flames' | 'matrix';
 }
 
+// IDs and prices remain stable so existing unlocks/equipped saves remain valid.
 const DEFAULT_SKINS: Omit<SkinDef, 'unlocked'>[] = [
-  {
-    id: 'lumina',
-    name: '星之灵宝',
-    desc: '纯澈天蓝水晶灵光 · 灵动兔耳 · 蓝白流光飘带',
-    price: 0,
-    primaryColor: 0x38bdf8,
-    secondaryColor: 0x0284c7,
-    earType: 'spirit',
-    trailType: 'streamer',
-  },
-  {
-    id: 'sakura',
-    name: '樱粉小狐',
-    desc: '软萌樱花粉白渐变 · 灵狐绒耳 · 飘零花瓣尾迹',
-    price: 25,
-    primaryColor: 0xf472b6,
-    secondaryColor: 0xec4899,
-    earType: 'fox',
-    trailType: 'petals',
-  },
-  {
-    id: 'midnight',
-    name: '暗夜幽灵',
-    desc: '幽邃深紫星夜结晶 · 软萌猫耳 · 幽蓝鬼火光轨',
-    price: 50,
-    primaryColor: 0xa855f7,
-    secondaryColor: 0x7e22ce,
-    earType: 'cat',
-    trailType: 'flames',
-  },
-  {
-    id: 'cyber',
-    name: '霓虹机甲',
-    desc: '高能脉冲赛博金核 · 科技天线 · 电子光子矩阵',
-    price: 80,
-    primaryColor: 0xfacc15,
-    secondaryColor: 0xeab308,
-    earType: 'mecha',
-    trailType: 'matrix',
-  },
+  { id: 'lumina', name: '薄荷旅人', desc: '清新薄荷绿，带着好奇心出发。', price: 0, primaryColor: 0x2bc48a, secondaryColor: 0x24845f, earType: 'spirit', trailType: 'streamer' },
+  { id: 'sakura', name: '桃桃漫游', desc: '软软桃花粉，把快乐装进口袋。', price: 25, primaryColor: 0xe583a5, secondaryColor: 0xa94f79, earType: 'fox', trailType: 'petals' },
+  { id: 'midnight', name: '丁香小梦', desc: '温柔丁香紫，收集沿途的小确幸。', price: 50, primaryColor: 0x9d86c9, secondaryColor: 0x675582, earType: 'cat', trailType: 'flames' },
+  { id: 'cyber', name: '奶油阳光', desc: '明亮奶油黄，今天也要元气满满。', price: 80, primaryColor: 0xe6b848, secondaryColor: 0xa77e31, earType: 'mecha', trailType: 'matrix' },
 ];
 
 const STORAGE_KEY = 'dl_wardrobe_v1';

@@ -38,7 +38,8 @@ export class Particles {
     p.s.texture = tex;
     p.s.anchor?.set(0.5);
     p.s.position.set(x, y);
-    p.s.scale.set(opts.scale);
+    // Normalize imported textures to the legacy 64px particle reference size.
+    p.s.scale.set(opts.scale * 64 / Math.max(tex.width, tex.height));
     p.s.tint = tint;
     p.s.rotation = Math.random() * Math.PI * 2;
     p.s.alpha = opts.alpha ?? 1;

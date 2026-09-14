@@ -1,0 +1,757 @@
+{
+  "pack": "Kenney New Platformer Pack 1.0",
+  "author": "Kenney",
+  "license": "CC0-1.0",
+  "homepage": "https://kenney.nl/assets/new-platformer-pack",
+  "download": "https://opengameart.org/sites/default/files/kenney_new-platformer-pack-1.0.zip",
+  "archiveSha256": "70593ee0fd676ca6009f5cb5cd0b1e2b9e5b350390323f827c830dbc7a97cfc2",
+  "files": [
+    {
+      "file": "character_green_front.png",
+      "source": "Sprites/Characters/Double/character_green_front.png",
+      "sourceSha256": "e07ea6d74612243e25904f8407ec3d7857cf7ea91ff9635653211f96e1b77d4c",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "248cdbe33a24e195c0420b73dcfd8e998b6e0cfe4659569a91f53312bb02fe58"
+    },
+    {
+      "file": "character_green_idle.png",
+      "source": "Sprites/Characters/Double/character_green_idle.png",
+      "sourceSha256": "bef7ccb39184d5273cd9219eb301ea93af297c8a65c6cb4d7aec720e30ab808a",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "358b53200ead1b29aaea358d15f36d58bf23fffe1c8d5a4ff0c88bad361746b9"
+    },
+    {
+      "file": "character_green_walk_a.png",
+      "source": "Sprites/Characters/Double/character_green_walk_a.png",
+      "sourceSha256": "4d6921cbd5396909e47cef6938089aca6921f9e94041363ce14074bb9fe54d9b",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "080988aec3e2e64803a6b716464b0f6445906770ed14ff478ce45749037cd778"
+    },
+    {
+      "file": "character_green_walk_b.png",
+      "source": "Sprites/Characters/Double/character_green_walk_b.png",
+      "sourceSha256": "1aeb86940527f16ffe2cc1af2a20a3f51c3f51d487730b1e0aaeb2b3325606a2",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "581c4c17c801cb4653057314a8b428ea1b7443cb413279c66e6d2b943ad3909f"
+    },
+    {
+      "file": "character_green_jump.png",
+      "source": "Sprites/Characters/Double/character_green_jump.png",
+      "sourceSha256": "9503a9572f23efeb20f2d499a9dc695d64ac7f123a8ab9705f18dea6c79fa91a",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "681a54f22532e674b1b3feb8c509c1098135fcadd6cc681d0a7db115ca2864e3"
+    },
+    {
+      "file": "character_green_hit.png",
+      "source": "Sprites/Characters/Double/character_green_hit.png",
+      "sourceSha256": "1d7a72226f5d0cc1c3ec9a178b2af91f85623dbdec8d49c61701101a3daa4f29",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "950cc42956f3fdeb10d7370ccd9a51057208ff92be0814ed738a1d0d295ecf92"
+    },
+    {
+      "file": "character_green_duck.png",
+      "source": "Sprites/Characters/Double/character_green_duck.png",
+      "sourceSha256": "ccbdcb3b0c470376be028cdf0327d9b65e54732a98c51f0a6061eb39a07b0550",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "9ec275d42272f5d71af99912fb57e26d7dd1840e5baf0549672a129e5a8f721a"
+    },
+    {
+      "file": "character_pink_front.png",
+      "source": "Sprites/Characters/Double/character_pink_front.png",
+      "sourceSha256": "f1e17ac43ea65e906808eba792915f1a3dddb841bf3dd03fd05f814d04b2f83e",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "5752e3145446aff60112d75083cf7443bb8eca9264cba45a3826331526edb5e9"
+    },
+    {
+      "file": "character_pink_idle.png",
+      "source": "Sprites/Characters/Double/character_pink_idle.png",
+      "sourceSha256": "336c30d7370584e97eabcde0440ff5a49f4aeb3144045e2abcc689bf0ac51713",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "17ae16ccc1c0d638bd3d5e5b0a4fabbe58f1eec24a32d841cce0c3cab63a7bd8"
+    },
+    {
+      "file": "character_pink_walk_a.png",
+      "source": "Sprites/Characters/Double/character_pink_walk_a.png",
+      "sourceSha256": "1d157e59249045c2521f1c8b9e0e0ec843dff9e9f0bb34888a73b51ee38d6e9f",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "610224f481d0be456459c45051f2cadd73fdc2fc8503b60972bfbead5adacfbd"
+    },
+    {
+      "file": "character_pink_walk_b.png",
+      "source": "Sprites/Characters/Double/character_pink_walk_b.png",
+      "sourceSha256": "05c088583620abdbf3f6d419d48b124c63bed30f0b7ad3da95e70f8b381fddfe",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "2cb2f635d4e6235827a5301aa4ec1de48bbf7fcd85120b81be6ef64c21106c28"
+    },
+    {
+      "file": "character_pink_jump.png",
+      "source": "Sprites/Characters/Double/character_pink_jump.png",
+      "sourceSha256": "6487a43bd7c0903735e0475c185c1db0b9d0b3d6156b223b0a543a5a9dc082fd",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "6ec38e2d43584dab016652bff5cb5663835670839cf051cb13484da511f35d40"
+    },
+    {
+      "file": "character_pink_hit.png",
+      "source": "Sprites/Characters/Double/character_pink_hit.png",
+      "sourceSha256": "6ac5ad1e0ab8260c46b5d7b5ab8a46d434472c28e699db7d5ac05c5f9ab0be74",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "4a728ef5c71275a52a4672f37e3c2961c0228414b3c3eb232761efc6626262e8"
+    },
+    {
+      "file": "character_pink_duck.png",
+      "source": "Sprites/Characters/Double/character_pink_duck.png",
+      "sourceSha256": "a592603b5abcfd8603a4df06a5a229e537440868be12cc8c7d4b326df234f58b",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "cde8f3d9e45c03902d4e92dfa3200868942e6c643aa63a81d22983a5be9a270e"
+    },
+    {
+      "file": "character_purple_front.png",
+      "source": "Sprites/Characters/Double/character_purple_front.png",
+      "sourceSha256": "b3f2ae5b5452f2b3ff770303b0f5821df697e76d67461b4bb1256733dfc6f59e",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "d2ba3c65019fa81d0a6a44470ebbf18c040e8f39faecc42b5b1261f1c338fcc6"
+    },
+    {
+      "file": "character_purple_idle.png",
+      "source": "Sprites/Characters/Double/character_purple_idle.png",
+      "sourceSha256": "c9480c9b77ef59154b247eefd1bc461a259ccf5a0be49ff5f50fc968657cd9e4",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "519ce9c4cf48b1a45eeefffa56681948e7d7772efdae15eb6aa01acdce2eb037"
+    },
+    {
+      "file": "character_purple_walk_a.png",
+      "source": "Sprites/Characters/Double/character_purple_walk_a.png",
+      "sourceSha256": "ba997985e3de83252c386d9df471f28ba78723fc38a09447abefd7b6b6b00671",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "6c0af3c2a37763ad591b1154496fc23eafee8ed50b5856e68c0951ab4fec30de"
+    },
+    {
+      "file": "character_purple_walk_b.png",
+      "source": "Sprites/Characters/Double/character_purple_walk_b.png",
+      "sourceSha256": "1e5ec7884fb5c5fa22cdcd692297abdd6ba79239094d019e12a093755bcc851b",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "7c9f97eabba79afbfb8fffa005b52a4e66819eb80b5082f844993dab6c10b343"
+    },
+    {
+      "file": "character_purple_jump.png",
+      "source": "Sprites/Characters/Double/character_purple_jump.png",
+      "sourceSha256": "7ddfd979269dc5814504932cfc17ca878cb1e9b058441acb8c1afd29ff3f25ce",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "36a0c94b52889802ac6d8a01fca0af7beb30a4381311bcca03fa486932e53f8f"
+    },
+    {
+      "file": "character_purple_hit.png",
+      "source": "Sprites/Characters/Double/character_purple_hit.png",
+      "sourceSha256": "08b9913b67e6b195eb2c2aa5e4ffc579c7b178b36374e2b3b7ccbe7c5a2579b0",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "c0d16d811d80c86d9226f0716decc04a11cce9736680a8e2238b5016790b36c2"
+    },
+    {
+      "file": "character_purple_duck.png",
+      "source": "Sprites/Characters/Double/character_purple_duck.png",
+      "sourceSha256": "0531b58a913fd2e385b85d9cbf393a85aeb86c7280853f816c4a7bba6aa75b49",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "3fc4a853ab90b0fc7a9cbcae7af66e768f18522948009f429e0315344e874afd"
+    },
+    {
+      "file": "character_yellow_front.png",
+      "source": "Sprites/Characters/Double/character_yellow_front.png",
+      "sourceSha256": "a6cb04950c9e56eb45098bfeb43d8e6f49c3235a0f2c6ee559726cc7b99684de",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "d986ed79ed5ac7e5b1d421d9a49406874131df537d023229015c086cfecb5cb3"
+    },
+    {
+      "file": "character_yellow_idle.png",
+      "source": "Sprites/Characters/Double/character_yellow_idle.png",
+      "sourceSha256": "8f108ffc12f296bdaae1887ea91c1cfa8a6d4c68e880135f3be3f5ac1171446e",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "40bca88f6c92c2c765763d09b5c1c3ac875eef7b8482dda436632a816a098fef"
+    },
+    {
+      "file": "character_yellow_walk_a.png",
+      "source": "Sprites/Characters/Double/character_yellow_walk_a.png",
+      "sourceSha256": "c847eeb10aded4c1541b037acd387b55e62c7c8129a5dd947ede2d3f761198a0",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "14fd6e6e19605ef7627cf3a8574dbbf2f7d71f5f995c7ef457f18274831c6135"
+    },
+    {
+      "file": "character_yellow_walk_b.png",
+      "source": "Sprites/Characters/Double/character_yellow_walk_b.png",
+      "sourceSha256": "48cb4cb56bdf103ac5a522e6c6a8872f72f9e8339b47baba9e89ab9c9f5fc304",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "5349a01571c16c43a6e86411b329c2d427d6d8a76d27a2f1f14330e2e0e26371"
+    },
+    {
+      "file": "character_yellow_jump.png",
+      "source": "Sprites/Characters/Double/character_yellow_jump.png",
+      "sourceSha256": "67757b0593d5276c3be5322832f6c5c32302fc4686330f6cf510512f89f4c880",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "a087e1f599ad321700c60d2cac5c430414f1edb077c9b36c9be16502e59c9afc"
+    },
+    {
+      "file": "character_yellow_hit.png",
+      "source": "Sprites/Characters/Double/character_yellow_hit.png",
+      "sourceSha256": "651d91fb40698d0320ba15f4edbcb0e040303b9407073562a82a087eba368a68",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "f955850faf51fd7f51386b901f484596596142c42a237032f8d7830c3906380e"
+    },
+    {
+      "file": "character_yellow_duck.png",
+      "source": "Sprites/Characters/Double/character_yellow_duck.png",
+      "sourceSha256": "f764010e17b27b266b3fbbf6d5408a001b7bd8ab1f5101f70a909d4e2e1afe0c",
+      "size": [
+        168,
+        204
+      ],
+      "operation": "alpha trim",
+      "sha256": "4735e336b887bd493d09cca7ef5adca33ad7bef0820b76ddbc292965d3edc2d8"
+    },
+    {
+      "file": "terrain_grass_block_top.png",
+      "source": "Sprites/Tiles/Double/terrain_grass_block_top.png",
+      "sourceSha256": "4f3966fb8449e75ae284fdd78befb23fb9e1c7e15a27b6a0b88c6bea412fc864",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "original dimensions",
+      "sha256": "662f8a8f3e842e04ccca3c7b3df7fa31cc259545f0b4606e66112c606e1d5079"
+    },
+    {
+      "file": "terrain_grass_block_center.png",
+      "source": "Sprites/Tiles/Double/terrain_grass_block_center.png",
+      "sourceSha256": "3902d4ddd2a2653b678bf71885527657d42eab8e08c082ae64f2eb3f95c837e7",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "original dimensions",
+      "sha256": "38fd1e48b7f2e81c1be2a3652f7c3a30c019f5f378016a8d4a0013453709f14b"
+    },
+    {
+      "file": "terrain_grass_horizontal_middle.png",
+      "source": "Sprites/Tiles/Double/terrain_grass_horizontal_middle.png",
+      "sourceSha256": "597a504b48f0851fd59f2bc76d01582776b111971682275e768c13cb42e64e6c",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "8e1e0a17b7c68615d6b8fb72e4102290db51fb8ff80dbcf9b7df0e35138534d3"
+    },
+    {
+      "file": "bridge_logs.png",
+      "source": "Sprites/Tiles/Double/bridge_logs.png",
+      "sourceSha256": "494bfd437e5b7d2f596a2da7e6c959f56a1c3ca58a6143cf1355062357e659a0",
+      "size": [
+        128,
+        54
+      ],
+      "operation": "alpha trim",
+      "sha256": "b9f65792a8cc8c5bde266d79461e6dd29341d4691c8286d62676020e3e20a24c"
+    },
+    {
+      "file": "block_planks.png",
+      "source": "Sprites/Tiles/Double/block_planks.png",
+      "sourceSha256": "6c7f719da2ad385f1f552f1e3a052be289951dd0fdb9429f2a07c2c335bbb148",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "b88292c9387cd4274de70e2b314e6564525570ff6a67c74a75fa26850f250d63"
+    },
+    {
+      "file": "bush.png",
+      "source": "Sprites/Tiles/Double/bush.png",
+      "sourceSha256": "db6409462946d9289ac2f3663cee9d5429ff3e0ef2f1ec86d709729925683065",
+      "size": [
+        128,
+        80
+      ],
+      "operation": "alpha trim",
+      "sha256": "b1a5aa6f8d32a6bba599eeef186ecb8032aed033a9d20e76bb4745850fa1a705"
+    },
+    {
+      "file": "rock.png",
+      "source": "Sprites/Tiles/Double/rock.png",
+      "sourceSha256": "ea755e50c2298d1e9bbdd76c72bea811d93a3062f2fe77893b16eac5fa3d3162",
+      "size": [
+        126,
+        88
+      ],
+      "operation": "alpha trim",
+      "sha256": "87c75c619d030356429a008676c61a3127539f21e66a7a0db717ebd977b6d44f"
+    },
+    {
+      "file": "grass.png",
+      "source": "Sprites/Tiles/Double/grass.png",
+      "sourceSha256": "43010738253232dc2905d9759a2291a27e10abeac0ce2cbafa6048008ef44359",
+      "size": [
+        82,
+        65
+      ],
+      "operation": "alpha trim",
+      "sha256": "1541ba804fe9270ee4d23e21b6e58d68064f58dc647745b2ba1b3a60bbe20829"
+    },
+    {
+      "file": "mushroom_brown.png",
+      "source": "Sprites/Tiles/Double/mushroom_brown.png",
+      "sourceSha256": "49353f92f384df82f0e9cdcafecd08b203933ba0d07088be2933ef0f1cb05e43",
+      "size": [
+        58,
+        56
+      ],
+      "operation": "alpha trim",
+      "sha256": "b5440e95d67640f2cf8644f87efeecb801a473509267ce1c3b67636fd3cb6d07"
+    },
+    {
+      "file": "mushroom_red.png",
+      "source": "Sprites/Tiles/Double/mushroom_red.png",
+      "sourceSha256": "c2159a3ae5f1f1eea81571d9c0b9f39144cf8e6754a24a865c1aa80080662baa",
+      "size": [
+        58,
+        48
+      ],
+      "operation": "alpha trim",
+      "sha256": "27c7ed5170b47ab533853ad0d92c123522fbcca86a83411a7ae7dab1afd841f1"
+    },
+    {
+      "file": "gem_yellow.png",
+      "source": "Sprites/Tiles/Double/gem_yellow.png",
+      "sourceSha256": "bcb99e8904bbfcf852ed0a879b8fa3cf3eae994467d2b5db28b6fc6963e45a1a",
+      "size": [
+        80,
+        70
+      ],
+      "operation": "alpha trim",
+      "sha256": "b438bccb9025ff33490df3dde9fb1e4c21c2543084e0335283928e0f512cf3b0"
+    },
+    {
+      "file": "gem_blue.png",
+      "source": "Sprites/Tiles/Double/gem_blue.png",
+      "sourceSha256": "a31d49f2cc177317e8de07139a0b0099662bcb1ee4e67abe18661b19a64a7990",
+      "size": [
+        80,
+        70
+      ],
+      "operation": "alpha trim",
+      "sha256": "fdf575a4e7537c9e42abcb3c7580552d753632e987eaa71708a05ecea5053822"
+    },
+    {
+      "file": "star.png",
+      "source": "Sprites/Tiles/Double/star.png",
+      "sourceSha256": "f7d0a92a4d3eaa97a40823e267f093b5e6d581546aee6dfd3c108c507328a039",
+      "size": [
+        80,
+        76
+      ],
+      "operation": "alpha trim",
+      "sha256": "7de79eda693d2089bd554361d3dcef878906794121f3f12358e002b01e97fb0e"
+    },
+    {
+      "file": "heart.png",
+      "source": "Sprites/Tiles/Double/heart.png",
+      "sourceSha256": "f38914b5ec0e26e9ad33bed26eec07250293bfd0a1ffa9589eaeb5f0d6678d22",
+      "size": [
+        72,
+        64
+      ],
+      "operation": "alpha trim",
+      "sha256": "897e6f2d2ec67dd38f8c612283d0e69897d9b7fa823a794631fc39f7af94e48a"
+    },
+    {
+      "file": "hud_coin.png",
+      "source": "Sprites/Tiles/Double/hud_coin.png",
+      "sourceSha256": "58a3602b79489dade5451302e35e969cea6d80db9013478e4f01f9261e5b3e96",
+      "size": [
+        82,
+        87
+      ],
+      "operation": "alpha trim",
+      "sha256": "1f393d7d5f5665a533d8f4d1df1fcfce982ab754c50a51c6a03252a7a7d103ed"
+    },
+    {
+      "file": "spikes.png",
+      "source": "Sprites/Tiles/Double/spikes.png",
+      "sourceSha256": "d4bbdf39ef4941c68f8e4d8783c7d22c3ab588bdd53f270f437dee8a0bc8f6fe",
+      "size": [
+        128,
+        68
+      ],
+      "operation": "alpha trim",
+      "sha256": "d4105f89e5b07add0cdb00d7a5f14c3ab1e7f2fb5b13754bcdee2110949fb234"
+    },
+    {
+      "file": "spring.png",
+      "source": "Sprites/Tiles/Double/spring.png",
+      "sourceSha256": "9468c4dd80a50a1b2c29f210dd01d6cf258ff321a0fe23ce5795743ccdf2256d",
+      "size": [
+        128,
+        88
+      ],
+      "operation": "alpha trim",
+      "sha256": "000879eab6a4d5fee5bb7a5bbf66e34baee5d1bbf506337eab0f7adaf8f5c2b0"
+    },
+    {
+      "file": "spring_out.png",
+      "source": "Sprites/Tiles/Double/spring_out.png",
+      "sourceSha256": "2df823e40193770c9ea5b32df8fe07a0722637dd44430246600be340ef2e5a0e",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "043f08dc382accb1a002b0f4b2f2e18e51b9c8e1ab8a4e6e1cd2095179196fc6"
+    },
+    {
+      "file": "saw.png",
+      "source": "Sprites/Tiles/Double/saw.png",
+      "sourceSha256": "4b37e81cf7110a6e49e7909c323fa356d63000423a5f996a3c968b7bc9e072cb",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "b4c17cb10fb27a1ebd5657a76ac4ca2081992670bedc42875ef1d9c753ad2c27"
+    },
+    {
+      "file": "flag_green_a.png",
+      "source": "Sprites/Tiles/Double/flag_green_a.png",
+      "sourceSha256": "0b3839116da5d1778559f7749ddbe223e618d29d763c555f3e258f773f759054",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "be36a3d52166f08f37488312818df072ef12fe0c511d7ac49893251f216ed4f0"
+    },
+    {
+      "file": "flag_green_b.png",
+      "source": "Sprites/Tiles/Double/flag_green_b.png",
+      "sourceSha256": "c353b61237fb44d08bfc7002de079aaec704922c4d2c4bdf511cc3fc6385bf49",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "988c010866e07a48295a732305d7657e9b4540717fef5289d04a57a88c27d55e"
+    },
+    {
+      "file": "coin_gold.png",
+      "source": "Sprites/Tiles/Double/coin_gold.png",
+      "sourceSha256": "d47ad8bc9957a1301ce2b649176652330a31e3ff5728f891d2408f295a1de615",
+      "size": [
+        75,
+        81
+      ],
+      "operation": "alpha trim",
+      "sha256": "7e0edbfe32443d42a3903307d26a07f6909ac10f1659f9ba1345c90724423d25"
+    },
+    {
+      "file": "coin_gold_side.png",
+      "source": "Sprites/Tiles/Double/coin_gold_side.png",
+      "sourceSha256": "92ec90ff76a7063c4c1b76817f04967c3d4bfbb54e3ba1e080f4411b029b82ee",
+      "size": [
+        32,
+        80
+      ],
+      "operation": "alpha trim",
+      "sha256": "477ead330340587773252bd48d4d605fe19a551e47e89dffeaf1b2beb144fa49"
+    },
+    {
+      "file": "key_blue.png",
+      "source": "Sprites/Tiles/Double/key_blue.png",
+      "sourceSha256": "2671ec98d0814ddd1eee03de7f09be94c7cd02df2c6a4ef49387448e929b9e23",
+      "size": [
+        96,
+        64
+      ],
+      "operation": "alpha trim",
+      "sha256": "db91090f09e6857d6d43221dfb6aff8c12da2ee36c73e57cd90c3fbba9760de0"
+    },
+    {
+      "file": "chain.png",
+      "source": "Sprites/Tiles/Double/chain.png",
+      "sourceSha256": "99292f7941c3b367ce2a2698c3d5b3cf4002fc121da2607a225f4745b1073900",
+      "size": [
+        72,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "c79201c23ea0b574e33253559e555a9f7c8bd5cd452f4255e295013612042e37"
+    },
+    {
+      "file": "conveyor.png",
+      "source": "Sprites/Tiles/Double/conveyor.png",
+      "sourceSha256": "76e159caff67a5548ae018c0d683e94c08ad6fd4c8b44144cd1d7c5c65d27889",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "d4e4894e6cf7a3f438b6a3a864ee083a9df30f2737db601bb5aa7095c2cc897a"
+    },
+    {
+      "file": "block_empty_warning.png",
+      "source": "Sprites/Tiles/Double/block_empty_warning.png",
+      "sourceSha256": "1ceb7d22847bc046fcb19065154eb3e6974995af0bc593514e3bf6264efbddae",
+      "size": [
+        128,
+        128
+      ],
+      "operation": "alpha trim",
+      "sha256": "40922f11a771ed848789e142ceccaaca26054b5700827af9ab426de461646143"
+    },
+    {
+      "file": "background_clouds.png",
+      "source": "Sprites/Backgrounds/Double/background_clouds.png",
+      "sourceSha256": "c3edc09ffe6a2883fb2bdb3984e34d1d69ddcdc7f5253711b20c1ac4630551c3",
+      "size": [
+        512,
+        512
+      ],
+      "operation": "Remove source sky matte with antialiased alpha recovery; original 512x512 dimensions",
+      "sha256": "6b9a271705f68fa5292de0769dcfee2093d6aea7d6c1fc9bd2b4f59e88f4e99a"
+    },
+    {
+      "file": "background_fade_hills.png",
+      "source": "Sprites/Backgrounds/Double/background_fade_hills.png",
+      "sourceSha256": "afcf41aa5f87008f2c78e7d43bc700336e5392b881a1a9b8a0dfebee9ab39020",
+      "size": [
+        512,
+        512
+      ],
+      "operation": "Remove source sky matte with antialiased alpha recovery; original 512x512 dimensions",
+      "sha256": "0ac5f7d53b37a5a5cc368f4728aaef16d56ee6ab48e355976da2fd62ab8415b2"
+    },
+    {
+      "file": "background_fade_trees.png",
+      "source": "Sprites/Backgrounds/Double/background_fade_trees.png",
+      "sourceSha256": "e88852efe2e5e92c9178b4b02fad785940defeb92d1def0f6d1b5cbd03ca2d39",
+      "size": [
+        512,
+        512
+      ],
+      "operation": "Remove source sky matte with antialiased alpha recovery; original 512x512 dimensions",
+      "sha256": "b9b88a0780fdc147949997069f3d346bb79e374c690c22388eb331852ed36ff6"
+    },
+    {
+      "file": "background_color_trees.png",
+      "source": "Sprites/Backgrounds/Double/background_color_trees.png",
+      "sourceSha256": "9465a1120291304303790629ed6adbf042987c23e36a3fc65f8f179b9eb9ccc8",
+      "size": [
+        512,
+        512
+      ],
+      "operation": "Original dimensions; remove flat source sky matte for parallax transparency",
+      "sha256": "63aeb76857b9563a2d5ef832aaa178e0d9069dc72522c0463e87c02090043221"
+    }
+  ],
+  "icons": {
+    "author": "Lucide Icons and Contributors; Cole Bemis for Feather-derived icons",
+    "license": "ISC and MIT",
+    "source": "https://github.com/lucide-icons/lucide/tree/main/icons",
+    "licenseFile": "icons/LICENSE.txt",
+    "operation": "currentColor replaced with #243c46 for standalone SVG display",
+    "files": [
+      {
+        "file": "arrow-right.svg",
+        "sha256": "43053adabe40b4c6824d2ed171f74e71a95f66b49bfedddee0ae559ac204a4a5"
+      },
+      {
+        "file": "arrow-up.svg",
+        "sha256": "170110db48ac48cc36a36b06f727cf5883ff614da3f4b18380e7530af25bfedb"
+      },
+      {
+        "file": "camera.svg",
+        "sha256": "46bc68bc0ed7c0a6ed70c42471f7b2a49993eeb4c416689667a0f2248645ee2e"
+      },
+      {
+        "file": "check.svg",
+        "sha256": "6e7dbf289448a6c3eea50a98164b6c47183e273d607b4e67823f9aebf9cbd7c2"
+      },
+      {
+        "file": "expand.svg",
+        "sha256": "d6392142075c18866f5537608d50606a2977bb247dfd03405c663bfcdab52a15"
+      },
+      {
+        "file": "flag.svg",
+        "sha256": "ff02d77f072706299b02faa50345583803f2fbaac81e5f9ffad873a1a830fdbb"
+      },
+      {
+        "file": "magnet.svg",
+        "sha256": "1e12725bbcee87ad93ae9d36e87698544278f1b448f91b4579c369ef58dc92ef"
+      },
+      {
+        "file": "pause.svg",
+        "sha256": "3880572c5131708b0a187e01050d96b293c0715fbb299ef0997970dc57a84c65"
+      },
+      {
+        "file": "play.svg",
+        "sha256": "71c7d570579cd23c31775432233e82f18af67b34541400e38615a7c46fd58af1"
+      },
+      {
+        "file": "rotate-ccw.svg",
+        "sha256": "f1a6ec0c7b4427b2f873ed660ac1ef48e3365c47748c4b52b7b8e412da927817"
+      },
+      {
+        "file": "ruler.svg",
+        "sha256": "1d312204aba2f8999d538c458ca2b36dcf717da837d8d36237f36940c29e86c8"
+      },
+      {
+        "file": "shield.svg",
+        "sha256": "d2c5500cc62bf90c64193864029d663df8ba23e5fc8fbbef06a85b93cb0de8b4"
+      },
+      {
+        "file": "shirt.svg",
+        "sha256": "3a9b97fe09d2b1debf4fd0985de7e9925e76b7d4eafdea6a6f7dbbb63772e07b"
+      },
+      {
+        "file": "smartphone.svg",
+        "sha256": "71534630830cffcf279ff6a6b92d5ef1f8c671da901a5a4e5eb5ea65e192b405"
+      },
+      {
+        "file": "sparkles.svg",
+        "sha256": "48df30fc26cc089da7a902424122e12d22508417e64e404088caafc2459b62cc"
+      },
+      {
+        "file": "timer.svg",
+        "sha256": "8c9740695dc802c6b5f599560f29503eae7dfb3a0e42372ab5816d7b5a4db3c7"
+      },
+      {
+        "file": "trophy.svg",
+        "sha256": "51a4a2a36f6b893fdddd8d29f2516bee11bf15957e230ddc09040246e9bf21c6"
+      },
+      {
+        "file": "volume-2.svg",
+        "sha256": "e8b9ab99f8455b9fecb2e3eda6cd792e6ed57cd94b48b3463511a40a9a4f8aeb"
+      },
+      {
+        "file": "volume-x.svg",
+        "sha256": "4a9e671bdaced14962701e3c050b402ffde1384c51049866259301f9e2f6055b"
+      },
+      {
+        "file": "x.svg",
+        "sha256": "c7f090f195ad77ad3879921b1af48cbde36a6b85a3cfbe98173b0fc4f827d5cf"
+      },
+      {
+        "file": "zap.svg",
+        "sha256": "10efa697db3061afa62114cae2b32621fcceb95741bddd1c05615144d14abc6d"
+      }
+    ]
+  },
+  "distributionIcon": {
+    "file": "dashline-icon-124.png",
+    "source": "kenney/character_green_front.png",
+    "operation": "resize and centre on 124x124 cream canvas"
+  }
+}

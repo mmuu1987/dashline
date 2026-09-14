@@ -144,7 +144,7 @@ async function runHumanTest(): Promise<void> {
     await page.keyboard.up('Space');
     await page.waitForTimeout(1_400);
     const runningStats = await page.locator('#hud-stats').innerText();
-    assert(runningStats.includes('📏'), '跑动 HUD 未更新距离');
+    assert(/\d+m/.test(runningStats), '跑动 HUD 未更新距离');
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'human_test_01_running.png') });
 
     await requireVisible(page, '#result.show', '撞毁结算面板');
@@ -202,9 +202,10 @@ async function runHumanTest(): Promise<void> {
     assert(!(await pauseBadge.isVisible()), '空格未恢复游戏');
 
     const muteBtn = page.locator('#btn-mute');
-    const initMute = await muteBtn.innerText();
+    const initMute = await muteBtn.getAttribute('aria-pressed');
+    assert(initMute === 'true' || initMute === 'false', '静音按钮缺少可访问状态');
     await muteBtn.click();
-    const afterMute = await muteBtn.innerText();
+    const afterMute = await muteBtn.getAttribute('aria-pressed');
     assert(initMute !== afterMute, '静音按钮状态未变化');
     await muteBtn.click();
 

@@ -63,6 +63,7 @@ apps/client → packages/core → packages/shared
 
 - [main.ts](./apps/client/src/main.ts) 只负责装配和游戏状态流；新增大型功能优先拆成独立模块。
 - 渲染只读取 `WorldSnapshot` 和模拟事件，不把视觉状态写回 core。
+- 美术使用本地 Kenney CC0 圆润卡通素材与 Lucide 图标；许可、来源与校验值保存在 `public/assets/`。禁止重新混用旧像素贴图或系统 emoji 图标，新增素材需维护 `asset-provenance.json`。
 - localStorage 统一通过 [storage.ts](./apps/client/src/storage.ts) 安全访问。
 - 新增本地持久化数据时使用带版本的稳定 key，并兼容旧数据缺字段的情况。
 - 不直接修改 `dist/`、`node_modules/` 或其他生成产物。
@@ -88,6 +89,8 @@ pnpm build
 
 ```bash
 pnpm test:browser
+# 美术或界面改动：先启动 pnpm dev，再执行多尺寸视觉契约检查
+pnpm test:art
 ```
 
 验收标准：
@@ -116,7 +119,7 @@ pnpm test:browser
 | 新增或调整赛道积木 | `packages/core/src/chunks.ts` |
 | 输入映射 | `apps/client/src/input.ts`、`packages/shared/src/types.ts` |
 | 主循环与结算流程 | `apps/client/src/main.ts` |
-| HUD、弹窗、按钮 | `apps/client/src/hud.ts`、`index.html` |
+| HUD、弹窗、按钮 | `apps/client/src/hud.ts`、`ui.css`、`ui-icons.ts`、`index.html` |
 | 玩家和赛道渲染 | `apps/client/src/render.ts`、`apps/client/src/render/` |
 | 音频 | `apps/client/src/audio.ts` |
 | 本地历史与连胜 | `apps/client/src/meta.ts` |

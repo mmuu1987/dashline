@@ -10,6 +10,7 @@
     "preview": "pnpm --filter @dashline/client preview",
     "test": "vitest run",
     "test:browser": "tsx scripts/browser-human-test.ts",
+    "test:art": "tsx scripts/browser-art-test.ts",
     "pages:deploy": "tsx scripts/deploy-pages.ts"
   },
   "devDependencies": {

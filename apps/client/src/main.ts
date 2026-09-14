@@ -17,6 +17,7 @@ import { Sfx } from './audio.js';
 import { AdminChannel } from './admin.js';
 import { loadBestRecord, saveBestRecord, type BestRecord } from './best-record.js';
 import { Hud } from './hud.js';
+import { setMuteControl, setPauseControl } from './ui-icons.js';
 import { InputBuffer } from './input.js';
 import { calculateStreak, getDayRecord, saveDayRecord } from './meta.js';
 import { AD_REVIVES_PER_RUN, REVIVE_BACKOFF_PX, ReviveBank, ReviveCheckpointTracker } from './revive.js';
@@ -63,7 +64,11 @@ async function boot(): Promise<void> {
   const talents = new Talents();
   platform.reportLoadProgress?.(1); // 平台进度条起点信号
   const assets = await loadAssets((done, total) => {
-    platform.reportLoadProgress?.(Math.round((done / total) * 100));
+    const percent = Math.round((done / total) * 100);
+    platform.reportLoadProgress?.(percent);
+    const progress = document.getElementById('loading-progress') as HTMLProgressElement;
+    progress.value = percent;
+    document.getElementById('loading-label')!.textContent = `正在准备今日旅途… ${percent}%`;
   });
   platform.reportLoadProgress?.(100);
 
@@ -84,14 +89,14 @@ async function boot(): Promise<void> {
 
   // 主题提示
   const currentTheme = THEMES[themeId] ?? THEMES[0]!;
-  setTimeout(() => hud.toast(`🎨 今日主题：${currentTheme.name}`), 400);
+  document.getElementById('theme-label')!.textContent = currentTheme.name;
 
   // ---- 静音按钮 ----
   const muteBtn = document.getElementById('btn-mute')!;
-  muteBtn.textContent = sfx.isMuted() ? '🔇' : '🔊';
+  setMuteControl(muteBtn, sfx.isMuted());
   muteBtn.addEventListener('click', () => {
     const muted = sfx.toggleMute();
-    muteBtn.textContent = muted ? '🔇' : '🔊';
+    setMuteControl(muteBtn, muted);
     if (!muted) sfx.unlock();
   });
 
@@ -103,13 +108,13 @@ async function boot(): Promise<void> {
     if (phase === 'pause') {
       phase = 'run';
       hud.showPause(false);
-      pauseBtn.textContent = '⏸';
+      setPauseControl(pauseBtn, false);
       last = performance.now();
       acc = 0;
     } else {
       phase = 'pause';
       hud.showPause(true);
-      pauseBtn.textContent = '▶';
+      setPauseControl(pauseBtn, true);
     }
   }
   pauseBtn.addEventListener('click', togglePause);
@@ -138,7 +143,7 @@ async function boot(): Promise<void> {
     hud.hideResult();
     phase = modalReturnPhase;
     hud.showPause(phase === 'pause');
-    pauseBtn.textContent = phase === 'pause' ? '▶' : '⏸';
+    setPauseControl(pauseBtn, phase === 'pause');
     if (phase === 'run') {
       last = performance.now();
       acc = 0;
@@ -225,7 +230,7 @@ async function boot(): Promise<void> {
   const unlimitedRevives = (): boolean => admin.unlimitedRevives();
 
   hud.setMode(
-    `${platform.isAvailable() ? '4399 运营模式' : '纯单机模式'}${admin.isOn() ? ' · 🛠 管理员（无限复活）' : ''}`,
+    `${platform.isAvailable() ? '4399 运营模式' : '纯单机模式'}${admin.isOn() ? ' · 管理员（无限复活）' : ''}`,
   );
   platform.track('game_ready');
 
@@ -250,7 +255,7 @@ async function boot(): Promise<void> {
     platform.track('run_start', { attempt: attempts });
     hud.hideResult();
     hud.showPause(false);
-    pauseBtn.textContent = '⏸';
+    setPauseControl(pauseBtn, false);
     hud.setMeta(attempts, best ? fmtBest(best) : '--', streak);
   }
 
@@ -288,7 +293,7 @@ async function boot(): Promise<void> {
       autoPaused = true;
       phase = 'pause';
       hud.showPause(true);
-      pauseBtn.textContent = '▶';
+      setPauseControl(pauseBtn, true);
     }
   };
   const resumeFromLifecycle = (): void => {
@@ -296,7 +301,7 @@ async function boot(): Promise<void> {
     autoPaused = false;
     phase = 'run';
     hud.showPause(false);
-    pauseBtn.textContent = '⏸';
+    setPauseControl(pauseBtn, false);
     last = performance.now();
     acc = 0;
   };
@@ -365,7 +370,7 @@ async function boot(): Promise<void> {
     input.resetHeld();
     hud.hideResult();
     hud.showPause(false);
-    pauseBtn.textContent = '⏸';
+    setPauseControl(pauseBtn, false);
     last = performance.now();
     acc = 0;
   }
@@ -382,7 +387,7 @@ async function boot(): Promise<void> {
     applyRevive();
     hud.toast(
       unlimitedRevives()
-        ? '🛠 管理员通道：复活次数无限'
+        ? '管理员通道：复活次数无限'
         : `💖 免费复活成功！今日还剩 ${revives.remainingFree()} 次`,
     );
     platform.track('free_revive_success', { usedInRun: freeRevivesUsedInRun });

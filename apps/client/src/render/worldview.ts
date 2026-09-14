@@ -18,7 +18,7 @@ export class WorldView {
   private flagCloth: Sprite | null = null;
   private track: Track | null = null;
   /** 弹跳菇（用于呼吸脉冲） */
-  private padCaps: Graphics[] = [];
+  private padCaps: Sprite[] = [];
   /** 碎裂板精灵，下标与 track.plats 对齐 */
   private crumbleSprites: (Container | null)[] = [];
   private brokenPlats = new Set<number>();
@@ -85,7 +85,7 @@ export class WorldView {
     const backdrop = new Graphics();
     backdrop
       .rect(-400, deepestY, track.length + 800, bottomY - deepestY)
-      .fill(0x0c101c);
+      .fill(0x91bab0);
     for (let i = 0; i + 1 < gsSorted.length; i++) {
       const a = gsSorted[i]!;
       const b = gsSorted[i + 1]!;
@@ -94,7 +94,7 @@ export class WorldView {
       // 坑口取两侧较低的那个面（y 越大越低），向下补暗色
       const lip = Math.max(a.y, b.y);
       if (lip >= deepestY) continue; // 已在全局底色覆盖范围内
-      backdrop.rect(a.x1, lip, gapW, bottomY - lip).fill(0x0c101c);
+      backdrop.rect(a.x1, lip, gapW, bottomY - lip).fill(0x91bab0);
     }
     this.root.addChild(backdrop);
 
@@ -106,17 +106,19 @@ export class WorldView {
       if (w <= 0) continue;
       const top = new TilingSprite({ texture: this.assets.groundTop, width: w, height: TOP_H });
       top.tileScale.set(GS);
+      top.tilePosition.x = -seg.x0;
       top.position.set(seg.x0, seg.y);
       this.root.addChild(top);
       const fillH = VIEW_H - seg.y - TOP_H + 40;
       if (fillH > 0) {
         const fill = new TilingSprite({ texture: this.assets.groundFill, width: w, height: fillH });
         fill.tileScale.set(GS);
+        fill.tilePosition.x = -seg.x0;
         fill.position.set(seg.x0, seg.y + TOP_H);
         this.root.addChild(fill);
       }
       const lip = new Graphics();
-      lip.rect(0, 0, w, 3).fill({ color: 0xd9ffb0, alpha: 0.35 });
+      lip.rect(0, 0, w, 2).fill({ color: 0x243c46, alpha: 0.75 });
       lip.position.set(seg.x0, seg.y - 1);
       this.root.addChild(lip);
     }
@@ -130,7 +132,7 @@ export class WorldView {
           width: p.w,
           height: PLAT_H,
         });
-        pts.tileScale.set(PLAT_H / 16);
+        pts.tileScale.set(PLAT_H / this.assets.platformLong.height);
         pts.scale.y = -1;
         pts.position.set(p.x, p.y);
         this.root.addChild(pts);
@@ -147,7 +149,7 @@ export class WorldView {
           width: p.w,
           height: CRUMBLE_H,
         });
-        board.tileScale.set(CRUMBLE_H / 16);
+        board.tileScale.set(CRUMBLE_H / this.assets.crate.height);
         board.alpha = 0.96;
         g.addChild(board);
         const cracks = new Graphics();
@@ -167,7 +169,7 @@ export class WorldView {
         width: p.w,
         height: PLAT_H,
       });
-      pts.tileScale.set(PLAT_H / 16);
+      pts.tileScale.set(PLAT_H / this.assets.platformLong.height);
       pts.position.set(p.x, p.y);
       this.root.addChild(pts);
       const edge = new Graphics();
@@ -188,7 +190,7 @@ export class WorldView {
         width: p.w,
         height: PLAT_H,
       });
-      board.tileScale.set(PLAT_H / 16);
+      board.tileScale.set(PLAT_H / this.assets.platformLong.height);
       board.position.set(0, 0);
       g.addChild(board);
       const rail = new Graphics();
@@ -206,18 +208,11 @@ export class WorldView {
     // 弹跳菇（贴合所在地面段高度）
     for (const pad of track.pads) {
       const py = this.terrainTopAt(pad.x + pad.w / 2);
-      const stem = new Graphics();
-      stem.roundRect(pad.x + pad.w / 2 - 7, py - 16, 14, 16, 4).fill(0xe8edf5);
-      this.root.addChild(stem);
-      const cap = new Graphics();
-      cap
-        .arc(0, 0, pad.w / 2 - 6, Math.PI, 0)
-        .closePath()
-        .fill({ color: 0x7ddf72 })
-        .stroke({ width: 2.5, color: 0x3e8f4a });
-      cap.circle(-pad.w * 0.18, -10, 5).fill(0xffffff);
-      cap.circle(pad.w * 0.15, -13, 7).fill(0xffe08a);
-      cap.position.set(pad.x + pad.w / 2, py - 14);
+      const cap = new Sprite(this.assets.spring);
+      cap.anchor.set(0.5, 1);
+      cap.width = pad.w;
+      cap.height = 26;
+      cap.position.set(pad.x + pad.w / 2, py);
       this.padCaps.push(cap);
       this.root.addChild(cap);
     }
@@ -227,47 +222,29 @@ export class WorldView {
       // 用所在地面高度判断：地面刺贴着地形，悬空刺梁离地很高
       const isBar = hz.y + hz.h < this.terrainTopAt(hz.x) - 60;
       if (isBar) {
-        const beam = new Graphics();
-        beam.roundRect(hz.x, hz.y, hz.w, hz.h, 3).fill(0x1e2432);
-        for (let ix = hz.x; ix < hz.x + hz.w; ix += 20) {
-          beam.poly([
-            { x: ix, y: hz.y },
-            { x: Math.min(ix + 10, hz.x + hz.w), y: hz.y },
-            { x: Math.min(ix + 18, hz.x + hz.w), y: hz.y + hz.h },
-            { x: Math.min(ix + 8, hz.x + hz.w), y: hz.y + hz.h },
-          ]).fill(0xf59e0b);
-        }
-        for (let tx = hz.x + 4; tx < hz.x + hz.w - 12; tx += SPIKE_W) {
-          beam
-            .moveTo(tx, hz.y)
-            .lineTo(tx + SPIKE_W / 2, hz.y - 12)
-            .lineTo(tx + SPIKE_W, hz.y)
-            .closePath()
-            .fill(0xc5d0e0)
-            .stroke({ width: 1.5, color: 0x1e293b });
-          beam.moveTo(tx + 2, hz.y).lineTo(tx + SPIKE_W / 2, hz.y - 10).stroke({ width: 1, color: 0xffffff });
-        }
-        for (let tx = hz.x + 4; tx < hz.x + hz.w - 12; tx += SPIKE_W) {
-          beam
-            .moveTo(tx, hz.y + hz.h)
-            .lineTo(tx + SPIKE_W / 2, hz.y + hz.h + 12)
-            .lineTo(tx + SPIKE_W, hz.y + hz.h)
-            .closePath()
-            .fill(0xc5d0e0)
-            .stroke({ width: 1.5, color: 0x1e293b });
-          beam.moveTo(tx + 2, hz.y + hz.h).lineTo(tx + SPIKE_W / 2, hz.y + hz.h + 10).stroke({ width: 1, color: 0xffffff });
-        }
-        beam.rect(hz.x - 2, hz.y, 4, hz.h).fill(0xdc2626);
-        beam.rect(hz.x + hz.w - 2, hz.y, 4, hz.h).fill(0xdc2626);
-        beam.circle(hz.x + hz.w / 2, hz.y + hz.h / 2, 5).fill(0xef4444);
-        beam.circle(hz.x + hz.w / 2, hz.y + hz.h / 2, 2.5).fill(0xffffff);
+        const beam = new TilingSprite({ texture: this.assets.warning, width: hz.w, height: hz.h });
+        beam.tileScale.set(hz.h / this.assets.warning.height);
+        beam.position.set(hz.x, hz.y);
         this.root.addChild(beam);
+        const units = Math.max(1, Math.round(hz.w / 40));
+        for (let i = 0; i < units; i++) {
+          for (const direction of [-1, 1]) {
+            const teeth = new Sprite(this.assets.spike);
+            teeth.width = hz.w / units;
+            teeth.height = 12;
+            teeth.position.set(hz.x + i * hz.w / units, direction === -1 ? hz.y - 12 : hz.y + hz.h + 12);
+            if (direction === 1) teeth.scale.y *= -1;
+            this.root.addChild(teeth);
+          }
+        }
         continue;
       }
-      const units = Math.round(hz.w / SPIKE_W);
+      const units = Math.max(1, Math.round(hz.w / (SPIKE_W * 2)));
       for (let i = 0; i < units; i++) {
         const s = new Sprite(this.assets.spike);
-        s.position.set(hz.x + i * SPIKE_W, hz.y);
+        s.width = hz.w / units;
+        s.height = hz.h;
+        s.position.set(hz.x + i * hz.w / units, hz.y);
         this.root.addChild(s);
       }
       const base = new Graphics();
@@ -291,21 +268,13 @@ export class WorldView {
         const root = new Container();
         const vortex = new Graphics();
         const isUp = pt.targetGravDir === -1;
-        vortex.ellipse(0, 0, pt.w / 2 + 6, pt.h / 2 + 6).stroke({
-          width: 3,
-          color: isUp ? 0xc084fc : 0x38bdf8,
-          alpha: 0.9,
-        });
-        vortex.ellipse(0, 0, pt.w / 2, pt.h / 2).fill({
-          color: isUp ? 0x581c87 : 0x075985,
-          alpha: 0.65,
-        });
-        const arr = new Graphics();
-        if (isUp) {
-          arr.moveTo(-7, 8).lineTo(0, -10).lineTo(7, 8).stroke({ width: 3, color: 0xffffff });
-        } else {
-          arr.moveTo(-7, -8).lineTo(0, 10).lineTo(7, -8).stroke({ width: 3, color: 0xffffff });
-        }
+        vortex.roundRect(-pt.w / 2 - 4, -pt.h / 2 - 4, pt.w + 8, pt.h + 8, 14)
+          .fill({ color: isUp ? 0xe8def4 : 0xd4eef1, alpha: 0.72 })
+          .stroke({ width: 3, color: isUp ? 0x8a71ab : 0x4d9197 });
+        const arr = new Sprite(this.assets.arrowUp);
+        arr.anchor.set(0.5);
+        arr.width = arr.height = 22;
+        if (!isUp) arr.rotation = Math.PI;
         root.addChild(vortex, arr);
         root.position.set(pt.x + pt.w / 2, pt.y + pt.h / 2);
         this.portalSprites.push(root);
@@ -317,10 +286,11 @@ export class WorldView {
     if (track.shields) {
       for (const sh of track.shields) {
         const root = new Container();
-        const star = new Graphics();
-        star.circle(0, 0, 15).fill({ color: 0x0284c7, alpha: 0.7 }).stroke({ width: 2.2, color: 0x38bdf8 });
-        star.circle(0, 0, 8).fill(0xffffff);
-        root.addChild(star);
+        const badge = new Graphics().circle(0, 0, 17).fill(0xd5f1fa).stroke({ width: 2, color: 0x356778 });
+        const icon = new Sprite(this.assets.shield);
+        icon.anchor.set(0.5);
+        icon.width = icon.height = 21;
+        root.addChild(badge, icon);
         root.position.set(sh.x, sh.y);
         this.shieldSprites.push(root);
         this.root.addChild(root);
@@ -331,10 +301,11 @@ export class WorldView {
     if (track.magnets) {
       for (const mg of track.magnets) {
         const root = new Container();
-        const mag = new Graphics();
-        mag.circle(0, 0, 15).fill({ color: 0xb45309, alpha: 0.7 }).stroke({ width: 2.2, color: 0xfbbf24 });
-        mag.circle(0, 0, 8).fill(0xfef08a);
-        root.addChild(mag);
+        const badge = new Graphics().circle(0, 0, 17).fill(0xffe6ad).stroke({ width: 2, color: 0x84602b });
+        const icon = new Sprite(this.assets.magnet);
+        icon.anchor.set(0.5);
+        icon.width = icon.height = 21;
+        root.addChild(badge, icon);
         root.position.set(mg.x, mg.y);
         this.magnetSprites.push(root);
         this.root.addChild(root);
@@ -346,14 +317,16 @@ export class WorldView {
       const zy = this.terrainTopAt(z.x + z.w / 2);
       const root = new Container();
       const base = new Graphics();
-      base.rect(z.x, zy - 6, z.w, 6).fill({ color: 0xffd23f, alpha: 0.28 });
-      base.rect(z.x, zy - 2, z.w, 2).fill({ color: 0xffe08a, alpha: 0.85 });
-      root.addChild(base);
+      base.roundRect(z.x, zy - 8, z.w, 8, 3).fill(0xf4c75d).stroke({ color: 0x92732f, width: 1.5 });
+      const belt = new TilingSprite({ texture: this.assets.conveyor, width: z.w, height: 10 });
+      belt.tileScale.set(0.16);
+      belt.position.set(z.x, zy);
+      root.addChild(base, belt);
       const chevrons: Graphics[] = [];
       const bx: number[] = [];
       for (let i = 0; i < Math.floor(z.w / 44); i++) {
         const ch = new Graphics();
-        ch.moveTo(-10, -22).lineTo(0, -12).lineTo(-10, -2).stroke({ width: 3.5, color: 0xffd23f, alpha: 0.9 });
+        ch.moveTo(-10, -22).lineTo(0, -12).lineTo(-10, -2).stroke({ width: 3.5, color: 0xa6751b, alpha: 0.9 });
         chevrons.push(ch);
         bx.push(22 + i * 44);
         root.addChild(ch);
@@ -365,15 +338,9 @@ export class WorldView {
     // 横扫钉球
     for (const pd of track.pendulums) {
       const g = new Container();
-      const body = new Graphics();
-      body.circle(0, 0, pd.r).fill({ color: 0xb3403a }).stroke({ width: 3, color: 0x5c1d1a });
-      for (let k = 0; k < 8; k++) {
-        const a = (Math.PI * 2 * k) / 8;
-        body.moveTo(Math.cos(a) * (pd.r - 2), Math.sin(a) * (pd.r - 2))
-          .lineTo(Math.cos(a) * (pd.r + 8), Math.sin(a) * (pd.r + 8))
-          .stroke({ width: 3.5, color: 0xd8d8e2 });
-      }
-      body.circle(0, 0, pd.r * 0.5).fill({ color: 0xffd23f, alpha: 0.85 });
+      const body = new Sprite(this.assets.saw);
+      body.anchor.set(0.5);
+      body.width = body.height = pd.r * 2;
       g.addChild(body);
       g.position.set(pd.x0, pd.highY);
       this.pendulumSprites.push(g);
@@ -386,16 +353,12 @@ export class WorldView {
     // 二段跳环
     for (const rg of track.rings) {
       const g = new Container();
-      const glow = new Sprite(this.assets.glow);
-      glow.anchor.set(0.5);
-      glow.tint = 0xffd23f;
-      glow.alpha = 0.55;
-      glow.scale.set(0.5);
-      g.addChild(glow);
       const ring = new Graphics();
-      ring.circle(0, 0, 18).stroke({ width: 4.5, color: 0xffd23f });
-      ring.circle(0, 0, 14).stroke({ width: 1.5, color: 0xffffff, alpha: 0.85 });
-      g.addChild(ring);
+      ring.circle(0, 0, 18).fill({ color: 0xfff2c4, alpha: 0.6 }).stroke({ width: 3, color: 0xba8a32 });
+      const star = new Sprite(this.assets.star);
+      star.anchor.set(0.5);
+      star.width = star.height = 23;
+      g.addChild(ring, star);
       g.position.set(rg.x, rg.y);
       this.ringSprites.push(g);
       this.root.addChild(g);
@@ -421,10 +384,12 @@ export class WorldView {
     if (track.gates) {
       for (const gt of track.gates) {
         const root = new Container();
-        const posts = new Graphics();
-        posts.roundRect(gt.x - 3, GROUND_Y - 8, gt.w + 6, 10, 3).fill(0x364052).stroke({ width: 1.5, color: 0x1a212e });
-        posts.roundRect(gt.x - 3, gt.y - 2, gt.w + 6, 10, 3).fill(0x364052).stroke({ width: 1.5, color: 0x1a212e });
-        root.addChild(posts);
+        for (const y of [GROUND_Y - 8, gt.y - 2]) {
+          const post = new TilingSprite({ texture: this.assets.warning, width: gt.w + 6, height: 10 });
+          post.tileScale.set(0.12);
+          post.position.set(gt.x - 3, y);
+          root.addChild(post);
+        }
         const diode = new Graphics();
         root.addChild(diode);
         this.gateDiodes.push(diode);
@@ -435,22 +400,19 @@ export class WorldView {
       }
     }
 
-    // 终点旗
-    const pole = new Graphics();
-    pole.rect(track.finishX - 3, GROUND_Y - 176, 6, 176).fill(0xe8edf5);
-    pole.circle(track.finishX, GROUND_Y - 178, 6).fill(0xffd23f);
-    pole.circle(track.finishX, GROUND_Y - 178, 10).fill({ color: 0xffd23f, alpha: 0.25 });
-    this.root.addChild(pole);
+    // Kenney 终点旗已包含旗杆；基底贴合真实地面。
     const cloth = new Sprite(this.assets.flagCloth);
-    cloth.anchor.set(0, 0.1);
-    cloth.position.set(track.finishX + 2, GROUND_Y - 172);
-    cloth.scale.set(0.9);
+    cloth.anchor.set(0, 1);
+    cloth.position.set(track.finishX, this.terrainTopAt(track.finishX));
+    cloth.width = cloth.height = 146;
     this.flagCloth = cloth;
     this.root.addChild(cloth);
 
-    // 地面装饰：tileset 的透明底草簇/高草/小灌木 + 少量石块与树丛
+    // 装饰始终在可交互物后方；不再把无碰撞木箱伪装成障碍物。
+    const decorations = new Container();
+    this.root.addChildAt(decorations, 1);
     const r = splitmix32(Number(track.finishX));
-    const bigProps: Texture[] = [this.assets.rock, this.assets.bush, this.assets.crate];
+    const bigProps: Texture[] = [this.assets.rock, this.assets.bush];
     for (const seg of track.grounds) {
       const isPadZone = (x: number): boolean =>
         track.pads.some((p) => x > p.x - 30 && x < p.x + p.w + 30);
@@ -465,14 +427,16 @@ export class WorldView {
           d.anchor.set(0.5, 1);
           d.scale.set(ART_SCALE);
           d.position.set(x, seg.y + 3);
-          this.root.addChild(d);
+          decorations.addChild(d);
           // 偶发放置大件道具，避免小块装饰铺满整条跑道
           if (r() < 0.3) {
             const s = new Sprite(bigProps[Math.floor(r() * bigProps.length)]!);
             s.anchor.set(0.5, 1);
             s.scale.set(ART_SCALE);
-            s.position.set(x + 54 + r() * 40, seg.y + 3);
-            this.root.addChild(s);
+            const propX = Math.min(seg.x1 - 24, x + 54 + r() * 40);
+            s.position.set(propX, seg.y + 3);
+            s.alpha = 0.78;
+            decorations.addChild(s);
           }
         }
         x += 130 + r() * 190;
@@ -647,7 +611,7 @@ export class WorldView {
       const coin = t?.coins[i];
       if (!coin) continue;
       if (coin.x < minX || coin.x > maxX) continue;
-      s.texture = this.assets.gemFrames[Math.floor(tSec * 8 + i) % 4]!;
+      s.texture = this.assets.gemFrames[Math.floor(tSec * 8 + i) % this.assets.gemFrames.length]!;
       s.y = coin.y + Math.sin(tSec * 2.6 + i) * 4;
     }
     // 二段跳环
@@ -670,7 +634,7 @@ export class WorldView {
       const sh = this.shieldSprites[i]!;
       if (!sh.visible) continue;
       if (t && t.shields[i] && (t.shields[i]!.x < minX || t.shields[i]!.x > maxX)) continue;
-      sh.rotation = tSec * 2.4 + i * 0.5;
+      sh.rotation = Math.sin(tSec * 2 + i) * 0.08;
       sh.scale.set(1 + Math.sin(tSec * 3.5 + i) * 0.1);
     }
     // 磁铁
@@ -685,12 +649,12 @@ export class WorldView {
       const cap = this.padCaps[i]!;
       if (t && t.pads[i] && (t.pads[i]!.x + t.pads[i]!.w < minX || t.pads[i]!.x > maxX)) continue;
       const k = 1 + Math.sin(tSec * 4.2 + i * 0.9) * 0.06;
-      cap.scale.set(k, 2 - k);
+      cap.width = (t?.pads[i]?.w ?? 48) * k;
+      cap.height = 26 * (2 - k);
     }
     // 终点旗飘动
     if (this.flagCloth && t && (t.finishX >= minX && t.finishX <= maxX + 200)) {
-      this.flagCloth.skew.y = Math.sin(tSec * 5.4) * 0.18;
-      this.flagCloth.scale.x = 0.9 + Math.sin(tSec * 3.2) * 0.06;
+      this.flagCloth.texture = this.assets.flagFrames[Math.floor(tSec * 5) % this.assets.flagFrames.length]!;
     }
     // 加速带箭头向右滚动
     for (const b of this.boostFx) {

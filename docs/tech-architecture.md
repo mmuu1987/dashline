@@ -123,12 +123,16 @@ grep -c dashline-admin apps/client/dist/assets/*.js   # 必须输出 0
 
 ## 渲染素材约定
 
-Sunny Land 像素素材按 384×216 绘制，视口 960×540 正好是它的 2.5 倍，因此所有 16px 素材格统一使用 `render/consts.ts` 的 `ART_SCALE`。混用倍率会让同一画面出现多种像素密度，看起来既糊又比例失调。像素素材一律 `scaleMode = 'nearest'`。
+美术统一为 Kenney New Platformer Pack 1.0 的圆润卡通原野风格，界面采用奶油白、薄荷绿、深青描边及金黄收集色。不再混用旧像素森林、水晶球与系统 emoji。
 
-- 草皮与泥土从 `art/tileset.png` 各取三个变体横向拼成 48×16 的条带再平铺，避免 16px 图案硬重复。早期版本的 `art/ground_top.png`、`art/ground_fill.png` 以及整图 `ground.png`、`plank.png`、`coin.png`、`cloud.png` 已被取代，连同全透明的 `art/shrooms.png` 与未使用的 `art/gem-5.png`、`art/gem-6.png` 一并从仓库删除；新增素材前请先确认它真的会被 `textures.ts` 的 `ASSET_URLS` 加载。
-- 地面装饰（草簇、高草、小灌木）取自 tileset 第 7 行的透明底格子。
-- 平台与碎裂板受关卡设计约束（平台离地最低 24px、层间 42px），厚度保持薄板 22px，不随 `ART_SCALE` 放大；但板身必须贴在判定面之下，与判定线对齐。
-- `art/forest.png` 上半部是透明底树冠、下半部是一整块纯色暗块，因此只截取树冠条带并按整数倍放大，不再整张缩小。
+- 场景与角色资源位于 `public/assets/kenney/`，作者 Kenney，CC0-1.0，可免费商用；来源为 https://kenney.nl/assets/new-platformer-pack ，实际导入的是作者上传 OpenGameArt 的 1.0 压缩包。原始许可保存在同目录 `LICENSE.txt`。
+- 操作、护盾和磁铁图标位于 `public/assets/icons/`，来自 Lucide；ISC 与部分 Feather 衍生图标的 MIT 声明完整保存在 `icons/LICENSE.txt`。运行时仅加载同源静态文件，不调用素材站或 CDN。
+- `public/assets/asset-provenance.json` 记录压缩包校验值、源路径、裁切/去底处理及最终文件 SHA-256；新增或编辑图片后需同步校验值。`art-assets.test.ts` 校验许可与素材完整性。
+- 使用双倍分辨率 PNG 和线性采样。128px 地形格按 `ART_SCALE = 48 / 128` 显示；宝石与装饰沿用该比例。平台 22px、碎裂板 20px，板身在碰撞面下方，不修改物理尺寸。
+- 同一角色所有姿态使用统一 168×204 画布裁切，渲染尺寸 34×42；脚底锚定 `snap.y + PLAYER_R`，姿态只由快照选择。衣橱原有 ID、价格、存档 key 保持不变，映射到绿、粉、紫、黄四款角色。
+- 背景从原图去除平铺底色，并恢复边缘透明度，再以四层视差叠加；八种每日主题使用同一浅色视觉体系。地面装饰位于交互物后方，无碰撞装饰不再使用木箱。
+- UI 样式集中在 `src/ui.css`，图标和按钮状态集中在 `src/ui-icons.ts`。HUD 与 16:9 canvas 同尺寸，面板内部滚动，静音/暂停状态以 `aria-pressed` 表达。
+- 在 `pnpm dev` 已启动后运行 `pnpm test:art`，验证 1440×900、960×540、640×360 的画布/HUD对齐、面板边界、资源本地化及战报绘制。截图默认输出至已忽略的 `outputs/art-review/`，不作为源代码提交。
 
 ## 数据边界
 

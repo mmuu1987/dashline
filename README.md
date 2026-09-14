@@ -13,6 +13,7 @@ Dashline 是一款纯单机、浏览器即开即玩的横版跑酷游戏。每�
 - 复活续跑：每天 3 次免费复活，从最近的安全落地检查点继续，坠坑也能救回来。
 - 本地成长：最佳成绩、连续完赛天数、金币、皮肤、成就和天赋保存在 localStorage。
 - 确定性核心：固定 60Hz 逻辑，渲染帧率不影响物理结果。
+- 统一卡通美术：Kenney CC0 角色与原野场景、浅色界面、Lucide 图标；全部素材随静态包本地提供。来源与完整许可见 `apps/client/public/assets/asset-provenance.json` 及对应目录 `LICENSE.txt`。
 
 ## 快速开始
 
@@ -23,6 +24,8 @@ pnpm dev
 ```
 
 浏览器访问 `http://localhost:5173`。
+
+开发服务启动后，可另开终端执行 `pnpm test:art` 检查多尺寸 UI 和素材加载；完整游戏流程执行 `pnpm test:browser`。
 
 构建静态版本：
 

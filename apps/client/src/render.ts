@@ -2,7 +2,7 @@
  * 渲染编排器：背景视差 → 赛道静态对象 → 拖尾 → 玩家 → 粒子 → 暗角。
  */
 import { Container, Sprite } from 'pixi.js';
-import { PLAYER_R, GROUND_Y, type Track, type WorldSnapshot } from '@dashline/core';
+import { PLAYER_R, type Track, type WorldSnapshot } from '@dashline/core';
 import { BallActor } from './render/actors.js';
 import { Background } from './render/background.js';
 import { VIEW_H, VIEW_W } from './render/consts.js';
@@ -161,7 +161,7 @@ export class GameView {
         this.trailT = 0;
         if ((snap.boost ?? 0) > 0) {
           this.fx.trailGold(snap.x - PLAYER_R * 0.4, snap.y + (Math.random() - 0.5) * 8);
-        } else {
+        } else if (snap.dashing) {
           this.fx.trail(snap.x - PLAYER_R * 0.4, snap.y + (Math.random() - 0.5) * 6);
         }
       }
@@ -170,7 +170,7 @@ export class GameView {
         this.runDustT += dt;
         if (this.runDustT > 0.12) {
           this.runDustT = 0;
-          this.fx.runDust(snap.x - PLAYER_R, GROUND_Y - 2);
+          this.fx.runDust(snap.x - PLAYER_R, snap.y + PLAYER_R - 2);
         }
       }
     }
