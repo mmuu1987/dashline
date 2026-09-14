@@ -354,7 +354,22 @@ export class World {
     }
 
     const half = PLAYER_R * 0.6;
-    const x = this._x;
+    // 本 tick 的前进量与碰撞查询的横向位置。
+    // 碰撞统一用"推进后"的 x：加速带 9.3px/tick、冲刺 11.3px/tick 都接近半个身位宽
+    // （half=9.6），用推进前的 x 判定等于判定框永远落在身体后面一帧，
+    // 高速撞上坑沿/台阶时会在"人已经嵌进地形"之后才检测到。
+    // dashTicksAfter 精确复刻下面分支的自减：空中冲刺分支会先 -- 再前进，
+    // 所以这里必须用自减后的值，否则冲刺会多推进一 tick（距离和手感都会变）。
+    const dashTicksAfter =
+      !this._grounded && this._dashTicks > 0 ? this._dashTicks - 1 : this._dashTicks;
+    const advVx =
+      dashTicksAfter > 0
+        ? TUNING.dashVx
+        : this._boostLeft > 0
+          ? TUNING.vx * BOOST_FACTOR
+          : TUNING.vx;
+    const adv = advVx * STEP_S;
+    const x = this._x + adv;
 
     if (this._grounded) {
       this._vy = 0;
@@ -381,12 +396,20 @@ export class World {
     } else {
       // 空中重力积分
       let windF = 1;
-      for (const wz of this.track.winds) {
-        if (this._x >= wz.x && this._x <= wz.x + wz.w) {
-          const top = GROUND_Y - wz.h;
-          if (this._y >= top && this._y <= GROUND_Y) {
-            windF = wz.factor;
-            break;
+      if (this.track.winds.length > 0) {
+        // 上升气流的有效区间锚定在"玩家脚下那块地面"的顶面，而不是基准高度 GROUND_Y：
+        // 气旋一旦被放到高地或坑沿上方，写死基准高度会让判定区间整体错位。
+        // 悬空（脚下是坑）时退回 GROUND_Y —— 现有 chUpdraft 正是把气旋架在坑上，
+        // 因此这条退路就是它的原有行为，不会改变现有关卡手感。
+        const under = this.groundTopUnder(this._x, half);
+        const baseY = under === null ? GROUND_Y : under;
+        for (const wz of this.track.winds) {
+          if (this._x >= wz.x && this._x <= wz.x + wz.w) {
+            const top = baseY - wz.h;
+            if (this._y >= top && this._y <= baseY) {
+              windF = wz.factor;
+              break;
+            }
           }
         }
       }
@@ -432,14 +455,8 @@ export class World {
       }
     }
 
-    // 前进
-    const vx =
-      this._dashTicks > 0
-        ? TUNING.dashVx
-        : this._boostLeft > 0
-          ? TUNING.vx * BOOST_FACTOR
-          : TUNING.vx;
-    this._x += vx * STEP_S;
+    // 前进：推进量与上方碰撞查询用的 adv 完全相同，避免判定框和身体错位
+    this._x += adv;
 
     // 弹跳菇
     if (this._grounded && this._gravDir === 1) {
@@ -727,7 +744,16 @@ export class World {
       // 正向重力：地面（按各地面段自身高度判定）
       for (const g of this.track.grounds) {
         if (x + half > g.x0 && x - half < g.x1) {
-          if (prevFeet <= g.y && feet >= g.y) {
+          // 接住条件 = "本 tick 结束时脚底没在新表面之上" 且 "本 tick 开始时脚底没比新表面低出贴地容差"。
+          // 后半段同时覆盖两种情形：
+          //   1) 经典落地：prevFeet <= g.y，本 tick 内自上而下穿过表面；
+          //   2) 台阶接住：下落中横向跨到高一级的地面时，脚底在"越过表面"那一帧就已经
+          //      低于新表面（prevFeet > g.y），此时旧的 prevFeet <= g.y 判据永远不成立，
+          //      高速（加速带 vx×1.55 ≈ 9.3px/tick、冲刺 11.3px/tick）会直接穿进坡体
+          //      一路坠到坑底 —— 即"加速跑撞到高一点的地面就掉下去"。
+          // 由于所有合格段都满足 g.y >= prevFeet - GROUND_STEP_MAX，
+          // 取最高者最多把玩家抬高 GROUND_STEP_MAX，不会变成穿墙电梯。
+          if (feet >= g.y && prevFeet <= g.y + GROUND_STEP_MAX) {
             if (bestTop === null || g.y < bestTop) {
               bestTop = g.y;
             }

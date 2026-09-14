@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { GROUND_Y, START_Y, buildTrack, createWorldWithTrack, type Track } from '../src/index.js';
+import {
+  GROUND_Y,
+  PLAYER_R,
+  START_Y,
+  buildTrack,
+  createWorldWithTrack,
+  type Track,
+} from '../src/index.js';
 
 function itemTrack(kind: 'shield' | 'magnet'): Track {
   return {
@@ -59,7 +66,43 @@ describe('审计回归护栏', () => {
   });
 
   it('固定种子的赛道结构保持黄金摘要', () => {
-    // core.14：赛道长度翻倍 + 难度解锁改为绝对距离 + 新增高低地形积木
+    // core.15：碰撞判定改用推进后的 x + 台阶接住条款（修复高速撞上略高地面掉坑）
     expect(fnv1a(JSON.stringify(buildTrack(20260904n)))).toBe('e2210c02');
+  });
+
+  it('高速撞上略高的坑沿时会被接住，而不是穿进地形坠坑', () => {
+    // 回归：坑宽 120、远岸比基准高 10px（恰好一级坡道台阶）。
+    // 旧实现在"脚底越过远岸顶面"那一 tick 已经满足 feet > g.y，
+    // 使 prevFeet <= g.y 不成立，玩家会贴着远岸侧面一路坠到坑底。
+    const edge = 600;
+    const pit = 120;
+    const rise = 10;
+    const track: Track = {
+      ...itemTrack('shield'),
+      shields: [],
+      grounds: [
+        { x0: -2_000, x1: edge, y: GROUND_Y },
+        { x0: edge + pit, x1: edge + pit + 6_000, y: GROUND_Y - rise },
+      ],
+      finishX: 1_000_000,
+      length: 1_000_000,
+    };
+    const world = createWorldWithTrack(1n, track);
+
+    // 起跳后长按，落点正好压在远岸坑沿上
+    let landed = false;
+    for (let i = 0; i < 400 && world.snapshot.alive; i++) {
+      const jumping = i >= 42 && i < 42 + 22;
+      world.step(jumping ? 0b011 : 0);
+      if (world.snapshot.grounded && world.snapshot.x > edge + pit) {
+        landed = true;
+        break;
+      }
+    }
+
+    expect(world.snapshot.alive).toBe(true);
+    expect(landed).toBe(true);
+    // 脚底应精确贴在远岸顶面，而不是嵌进地形里
+    expect(world.snapshot.y + PLAYER_R).toBeCloseTo(GROUND_Y - rise, 5);
   });
 });
