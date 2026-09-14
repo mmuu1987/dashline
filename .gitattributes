@@ -1,0 +1,3 @@
+# 这些素材的字节被 apps/client/test/art-assets.test.ts 按 SHA-256 校验，
+# 统一以 CRLF 检出，避免 Linux CI（LF）与 Windows 开发机（CRLF）哈希不一致。
+apps/client/public/assets/icons/*.svg text eol=crlf
